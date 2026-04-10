@@ -22,6 +22,33 @@ try {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Add qualification document column if it doesn't exist
+    $columnCheck = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'qualification_document'");
+    if (!$columnCheck->fetch()) {
+        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN qualification_document VARCHAR(255) NULL AFTER qualifications");
+    }
+
+    // Add availability and capacity columns if missing
+    $availabilityDaysCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_days'");
+    if (!$availabilityDaysCol->fetch()) {
+        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_days TEXT NULL AFTER hourly_rate");
+    }
+
+    $availabilityStartCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_start'");
+    if (!$availabilityStartCol->fetch()) {
+        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_start VARCHAR(20) NULL AFTER availability_days");
+    }
+
+    $availabilityEndCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_end'");
+    if (!$availabilityEndCol->fetch()) {
+        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_end VARCHAR(20) NULL AFTER availability_start");
+    }
+
+    $maxSessionsCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'max_sessions_per_day'");
+    if (!$maxSessionsCol->fetch()) {
+        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN max_sessions_per_day INT NULL AFTER availability_end");
+    }
 } catch (PDOException $e) {
     error_log('Tutor profile table creation error: ' . $e->getMessage());
 }
@@ -34,6 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bio = trim($_POST['bio'] ?? '');
     $experience = trim($_POST['experience'] ?? '');
     $hourly_rate = trim($_POST['hourly_rate'] ?? '');
+    $availability_days = isset($_POST['availability_days']) && is_array($_POST['availability_days']) ? implode(',', $_POST['availability_days']) : '';
+    $availability_start = trim($_POST['availability_start'] ?? '');
+    $availability_end = trim($_POST['availability_end'] ?? '');
+    $max_sessions_per_day = intval($_POST['max_sessions_per_day'] ?? 0);
 
     $profile_image = '';
     if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
@@ -61,6 +92,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $qualification_document = '';
+    if (isset($_FILES['qualification_document']) && $_FILES['qualification_document']['error'] === UPLOAD_ERR_OK) {
+        $doc_upload_dir = '../uploads/tutor_qualifications/';
+        if (!is_dir($doc_upload_dir)) {
+            mkdir($doc_upload_dir, 0755, true);
+        }
+
+        $doc_extension = strtolower(pathinfo($_FILES['qualification_document']['name'], PATHINFO_EXTENSION));
+        $allowed_doc_extensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+
+        if (in_array($doc_extension, $allowed_doc_extensions)) {
+            $doc_filename = 'qualification_' . $_SESSION['user_id'] . '_' . time() . '.' . $doc_extension;
+            $doc_upload_path = $doc_upload_dir . $doc_filename;
+
+            if (move_uploaded_file($_FILES['qualification_document']['tmp_name'], $doc_upload_path)) {
+                $qualification_document = 'uploads/tutor_qualifications/' . $doc_filename;
+            } else {
+                $message = 'Failed to upload qualification document.';
+                $messageType = 'error';
+            }
+        } else {
+            $message = 'Invalid qualification document format. Use PDF, DOC, DOCX, JPG, or PNG.';
+            $messageType = 'error';
+        }
+    }
+
     if (empty($message)) {
         try {
             $stmt = $pdo->prepare('SELECT id FROM tutor_profiles WHERE user_id = ?');
@@ -68,12 +125,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existing = $stmt->fetch();
 
             if ($existing) {
-                $sql = 'UPDATE tutor_profiles SET full_name = ?, phone = ?, subjects_taught = ?, qualifications = ?, bio = ?, experience = ?, hourly_rate = ?';
-                $params = [$full_name, $phone, $subjects_taught, $qualifications, $bio, $experience, $hourly_rate];
+                $sql = 'UPDATE tutor_profiles SET full_name = ?, phone = ?, subjects_taught = ?, qualifications = ?, bio = ?, experience = ?, hourly_rate = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_sessions_per_day = ?';
+                $params = [$full_name, $phone, $subjects_taught, $qualifications, $bio, $experience, $hourly_rate, $availability_days, $availability_start, $availability_end, $max_sessions_per_day];
 
                 if (!empty($profile_image)) {
                     $sql .= ', profile_image = ?';
                     $params[] = $profile_image;
+                }
+
+                if (!empty($qualification_document)) {
+                    $sql .= ', qualification_document = ?';
+                    $params[] = $qualification_document;
                 }
 
                 $sql .= ' WHERE user_id = ?';
@@ -82,8 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute($params);
             } else {
-                $stmt = $pdo->prepare('INSERT INTO tutor_profiles (user_id, profile_image, full_name, phone, subjects_taught, qualifications, bio, experience, hourly_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$_SESSION['user_id'], $profile_image, $full_name, $phone, $subjects_taught, $qualifications, $bio, $experience, $hourly_rate]);
+                $stmt = $pdo->prepare('INSERT INTO tutor_profiles (user_id, profile_image, full_name, phone, subjects_taught, qualifications, qualification_document, bio, experience, hourly_rate, availability_days, availability_start, availability_end, max_sessions_per_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$_SESSION['user_id'], $profile_image, $full_name, $phone, $subjects_taught, $qualifications, $qualification_document, $bio, $experience, $hourly_rate, $availability_days, $availability_start, $availability_end, $max_sessions_per_day]);
             }
 
             header('Location: dashboard.php');
@@ -232,10 +294,50 @@ try {
                         </div>
 
                         <div class="form-section">
+                            <h3>Availability & Capacity</h3>
+                            <?php $savedDays = !empty($profile['availability_days']) ? array_map('trim', explode(',', $profile['availability_days'])) : []; ?>
+                            <div class="form-group">
+                                <label>Available Days</label>
+                                <div style="display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px;">
+                                    <?php
+                                    $daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+                                    foreach ($daysOfWeek as $day):
+                                    ?>
+                                        <label style="display:flex; gap:8px; align-items:center; margin:0; font-weight:500;">
+                                            <input type="checkbox" name="availability_days[]" value="<?php echo $day; ?>" <?php echo in_array($day, $savedDays) ? 'checked' : ''; ?> style="width:auto;">
+                                            <?php echo $day; ?>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="availability_start">Available From</label>
+                                <input type="time" id="availability_start" name="availability_start" value="<?php echo htmlspecialchars($profile['availability_start'] ?? ''); ?>">
+                            </div>
+                            <div class="form-group">
+                                <label for="availability_end">Available To</label>
+                                <input type="time" id="availability_end" name="availability_end" value="<?php echo htmlspecialchars($profile['availability_end'] ?? ''); ?>">
+                            </div>
+                            <div class="form-group">
+                                <label for="max_sessions_per_day">Maximum Sessions Per Day</label>
+                                <input type="number" id="max_sessions_per_day" name="max_sessions_per_day" min="1" max="20" value="<?php echo htmlspecialchars($profile['max_sessions_per_day'] ?? ''); ?>" placeholder="e.g. 5">
+                            </div>
+                        </div>
+
+                        <div class="form-section">
                             <h3>Professional Background</h3>
                             <div class="form-group">
                                 <label for="qualifications">Qualifications</label>
                                 <textarea id="qualifications" name="qualifications" placeholder="Degrees, certifications, or training programs."><?php echo htmlspecialchars($profile['qualifications'] ?? ''); ?></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="qualification_document">Upload Qualification Certificate/Document</label>
+                                <input type="file" id="qualification_document" name="qualification_document" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                                <?php if (!empty($profile['qualification_document'])): ?>
+                                    <p style="margin-top:10px;">
+                                        <a href="../<?php echo htmlspecialchars($profile['qualification_document']); ?>" target="_blank" class="btn">View Current Qualification Document</a>
+                                    </p>
+                                <?php endif; ?>
                             </div>
                             <div class="form-group">
                                 <label for="experience">Experience</label>

@@ -6,11 +6,19 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
-    'Psr\\Log\\' => array($vendorDir . '/psr/log/Psr/Log'),
+    'apimatic\\jsonmapper\\' => array($vendorDir . '/apimatic/jsonmapper/src'),
+    'Unirest\\' => array($vendorDir . '/apimatic/unirest-php/src'),
+    'Symfony\\Polyfill\\Php80\\' => array($vendorDir . '/symfony/polyfill-php80'),
+    'Symfony\\Polyfill\\Mbstring\\' => array($vendorDir . '/symfony/polyfill-mbstring'),
+    'Symfony\\Component\\HttpFoundation\\' => array($vendorDir . '/symfony/http-foundation'),
+    'Psr\\Log\\' => array($vendorDir . '/psr/log/src'),
     'Psr\\Http\\Message\\' => array($vendorDir . '/psr/http-factory/src', $vendorDir . '/psr/http-message/src'),
     'Psr\\Http\\Client\\' => array($vendorDir . '/psr/http-client/src'),
+    'PaypalServerSdkLib\\' => array($vendorDir . '/paypal/paypal-server-sdk/src'),
     'LeviZwannah\\PesapalSdk\\' => array($vendorDir . '/levizwannah/pesapal-sdk-php/src'),
     'GuzzleHttp\\Psr7\\' => array($vendorDir . '/guzzlehttp/psr7/src'),
     'GuzzleHttp\\Promise\\' => array($vendorDir . '/guzzlehttp/promises/src'),
     'GuzzleHttp\\' => array($vendorDir . '/guzzlehttp/guzzle/src'),
+    'Core\\' => array($vendorDir . '/apimatic/core/src'),
+    'CoreInterfaces\\' => array($vendorDir . '/apimatic/core-interfaces/src'),
 );

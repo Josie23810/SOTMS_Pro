@@ -12,12 +12,25 @@ try {
     $studentId = getStudentId($pdo, $_SESSION['user_id']);
 
     if ($studentId) {
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status IN ("pending", "confirmed") AND session_date >= NOW()');
-        $stmt->execute([$studentId]);
+        $stmt = $pdo->prepare('
+            SELECT COUNT(*)
+            FROM sessions s
+            LEFT JOIN students st ON s.student_id = st.id
+            WHERE st.user_id = ?
+              AND s.status = "confirmed"
+              AND s.session_date >= NOW()
+        ');
+        $stmt->execute([$_SESSION['user_id']]);
         $upcomingSessions = $stmt->fetchColumn();
 
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status = "completed"');
-        $stmt->execute([$studentId]);
+        $stmt = $pdo->prepare('
+            SELECT COUNT(*)
+            FROM sessions s
+            LEFT JOIN students st ON s.student_id = st.id
+            WHERE st.user_id = ?
+              AND s.status = "completed"
+        ');
+        $stmt->execute([$_SESSION['user_id']]);
         $completedSessions = $stmt->fetchColumn();
     }
 
@@ -397,6 +410,12 @@ try {
                     <div class="number">--</div>
                     <p>Browse our tutor directory</p>
                 </div>
+                <div class="stat-card">
+                    <h3>Tutor Uploaded Resources</h3>
+                    <div class="number">📚</div>
+                    <p>Open all tutor-shared materials.</p>
+                    <a href="resources.php" class="btn">View Resources</a>
+                </div>
             </div>
             
             <div class="sections">
@@ -409,32 +428,83 @@ try {
                     </ul>
                 </div>
                 
-                <div class="section">
-                    <h2>My Sessions</h2>
-                    <?php if ($upcomingSessions > 0): ?>
-                        <p>You have <?php echo $upcomingSessions; ?> upcoming session(s).</p>
-                        <a href="#" class="btn">View All Sessions</a>
-                    <?php else: ?>
-                        <p>You have no upcoming sessions.</p>
-                        <a href="book_session.php" class="btn">Schedule a Session</a>
-                    <?php endif; ?>
+            <div class="section">
+    <h2>My Sessions</h2>
+    <?php if ($upcomingSessions > 0): ?>
+        <p>You have <?php echo $upcomingSessions; ?> upcoming session(s).</p>
+        
+        <?php 
+        // 1. FETCH DATA FIRST
+        try {
+            $stmt = $pdo->prepare('
+                SELECT s.id, s.title, s.session_date, s.status, t.name as tutor_name
+                FROM sessions s
+                LEFT JOIN students st ON s.student_id = st.id
+                LEFT JOIN tutors t ON s.tutor_id = t.id
+                WHERE st.user_id = ? AND s.status IN ("confirmed", "scheduled")
+                ORDER BY s.session_date ASC
+                LIMIT 3
+            ');
+            $stmt->execute([$_SESSION['user_id']]);
+            $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $sessions = []; // Fallback to empty array if query fails
+        }
+        ?>
+
+        <?php if (!empty($sessions)): ?>
+            <?php foreach ($sessions as $session): ?>
+                <div class="session-card" style="border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-bottom:12px; background:#ffffff;">
+                    <h4><?php echo htmlspecialchars($session['title']); ?></h4>
+                    <p>👨‍🏫 <?php echo htmlspecialchars($session['tutor_name'] ?? 'Tutor not assigned'); ?></p>
+                    <p>📅 <?php echo date('M j, Y g:i A', strtotime($session['session_date'])); ?></p>
+                    <p>💰 KSh <span id="amount-<?php echo $session['id']; ?>">500</span></p>
+                    
+                    <button onclick="joinSession(<?php echo $session['id']; ?>, 500)" 
+                            class="btn" style="background:#10b981; font-size:14px; padding:8px 16px; border:none; cursor:pointer; color:white; border-radius:8px;">
+                        💳 Join with M-Pesa
+                    </button>
                 </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+
+        <div style="margin-top: 15px;">
+            <a href="schedule.php" class="btn">View All Sessions</a>
+            <a href="resources.php" class="btn" style="background:#6b7280;">View Resources</a>
+        </div>
+
+    <?php else: ?>
+        <p>You have no upcoming sessions.</p>
+        <a href="book_session.php" class="btn">Schedule a Session</a>
+        <a href="resources.php" class="btn" style="background:#6b7280;">View Resources</a>
+    <?php endif; ?>
+</div> 
+                <!-- Payment Modal -->
+    <div id="paymentModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+        <div style="background:white; margin:10% auto; padding:30px; border-radius:16px; max-width:450px; box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+            <h3 style="margin:0 0 20px; color:#1f2937;">Pay to Join Session</h3>
+            <div id="sessionDetails" style="background:#f8fafc; padding:16px; border-radius:12px; margin-bottom:20px;"></div>
+            <input type="tel" id="phoneInput" placeholder="2547XXXXXXXX" style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:8px; margin-bottom:16px; font-size:16px;">
+            <button onclick="initiatePayment()" id="payButton" class="btn" style="width:100%; background:#10b981; margin-bottom:12px;">💳 Pay with M-Pesa</button>
+            <button onclick="checkPaymentStatus()" class="btn" style="width:48%; background:#2563eb;">Check Status</button>
+            <button onclick="closeModal()" class="btn" style="width:48%; background:#6b7280;">Close</button>
+            <div id="paymentStatus"></div>
+        </div>
+    </div>
+</div>
                 
                 <div class="section">
                     <h2>Recommended Tutors</h2>
                     <?php if (empty($tutors)): ?>
-                        <p>No tutors available right now. Check back soon.</p>
                     <?php else: ?>
                         <?php foreach ($tutors as $t): ?>
                             <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; background:#ffffff;">
                                 <strong><?php echo htmlspecialchars($t['name']); ?></strong>
-                                <p style="margin:4px 0; color:#6b7280;"><?php echo htmlspecialchars($t['subjects_taught'] ?? 'Subjects not set yet'); ?></p>
-                                <p style="margin:4px 0; font-size:.92rem; color:#475569;"><?php echo htmlspecialchars(strlen($t['bio']) ? substr($t['bio'], 0, 120) . (strlen($t['bio']) > 120 ? '...' : '') : 'No bio available'); ?></p>
+                                <p style="margin:4px 0; color:#6b7280;"><?php echo htmlspecialchars($t['subjects_taught'] ?? ''); ?></p>
+                                <p style="margin:4px 0; font-size:.92rem; color:#475569;"><?php echo htmlspecialchars(strlen($t['bio']) ? substr($t['bio'], 0, 120) . (strlen($t['bio']) > 120 ? '...' : '') : ''); ?></p>
                                 <div style="margin-top: 8px; font-size:.9rem; color:#0f172a; font-weight:600;">
                                     <?php if (!empty($t['hourly_rate'])): ?>
                                         Rate: <?php echo htmlspecialchars($t['hourly_rate']); ?>
-                                    <?php else: ?>
-                                        Rate: Not specified
                                     <?php endif; ?>
                                 </div>
                                 <a href="book_session.php?tutor=<?php echo $t['tutor_id']; ?>" class="btn" style="margin-top:8px;">Book a Session</a>
@@ -449,7 +519,7 @@ try {
                         <li><a href="profile.php">Update your profile information</a></li>
                         <li><a href="messages.php">Send messages to tutors</a></li>
                         <li><a href="find_tutors.php">Browse available tutors</a></li>
-                        <li><a href="resources.php">Access learning resources</a></li>
+                        <li><a href="resources.php">Access tutor uploaded resources</a></li>
                     </ul>
                 </div>
             </div>
@@ -473,5 +543,147 @@ try {
             event.stopPropagation();
         });
     </script>
+    <script>
+// Global variables
+let currentSessionId = null;
+let currentPaymentId = null;
+
+// Join session - show payment modal
+function joinSession(sessionId, amount) {
+    currentSessionId = sessionId;
+    document.getElementById('phoneInput').value = '';
+    document.getElementById('paymentStatus').innerHTML = '';
+    document.getElementById('paymentModal').style.display = 'block';
+    
+    // Show session details
+    document.getElementById('sessionDetails').innerHTML = `
+        <strong>Session ID: ${sessionId}</strong><br>
+        Amount: KSh ${amount}<br>
+        <small>Enter M-Pesa PIN on your phone after clicking Pay</small>
+    `;
+}
+
+async function initiatePayment() {
+    const phone = document.getElementById('phoneInput').value.trim();
+    const statusDiv = document.getElementById('paymentStatus');
+    const payBtn = document.getElementById('payButton');
+
+    // 1. Validation: Must be 254... 12 digits
+    if (!phone.match(/^254[17]\d{8}$/)) {
+        statusDiv.innerHTML = '<div style="color:#ef4444; font-weight:bold;">❌ Format: 2547XXXXXXXX</div>';
+        return;
+    }
+
+    payBtn.innerHTML = '⏳ Processing...';
+    payBtn.disabled = true;
+    statusDiv.innerHTML = '<div style="color:#2563eb;">📡 Requesting M-Pesa Prompt...</div>';
+
+    try {
+        // 2. Fetch from your Node.js server (Port 8000)
+        const response = await fetch('http://localhost:8000/api/mpesa/stkpush', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: phone,
+                amount: 500, // Or use a dynamic variable
+                reference: "SOTMS" + currentSessionId, // REPLACED DASH WITH STRING CONCAT
+                description: "Tutor Session Payment"
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div style="background:#d1fae5; color:#065f46; padding:12px; border-radius:8px; border:1px solid #a7f3d0;">
+                    ✅ <b>PIN Prompt Sent!</b><br>
+                    Please enter your M-Pesa PIN on your phone now.
+                </div>
+            `;
+            // Start polling for the DB update
+            checkPaymentStatus(currentSessionId);
+        } else {
+            // Show the actual Safaricom error (e.g., Invalid Callback)
+            statusDiv.innerHTML = `<div style="color:#ef4444; font-weight:bold;">❌ ${data.error || 'Request Rejected'}</div>`;
+            payBtn.disabled = false;
+            payBtn.innerHTML = '💳 Retry Payment';
+        }
+    } catch (error) {
+        statusDiv.innerHTML = '<div style="color:#ef4444;">❌ Server Connection Failed. Is Node running?</div>';
+        payBtn.disabled = false;
+        payBtn.innerHTML = '💳 Retry Connection';
+    }
+}
+
+    // UPDATED: This now talks to your Node.js server on Port 8000
+const response = await fetch('http://localhost:8000/api/mpesa/stkpush', { 
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        phone: phone,               // Matches req.body.phone in server.js
+        amount: <?= $amount ?>,      // Your PHP session amount
+        reference: "SOTMS-<?= $session_id ?>", // Matches req.body.reference
+        description: "Tutor Session Payment"
+    })
+});
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentPaymentId = data.payment_id;
+            document.getElementById('paymentStatus').innerHTML = `
+                <div style="background:#d1fae5; color:#065f46; padding:12px; border-radius:8px;">
+                    ✅ M-Pesa PIN sent to ${phone}<br>
+                    Reference: ${data.reference}<br>
+                    <button onclick="checkPaymentStatus()" style="margin-top:8px;">Check Status</button>
+                </div>
+            `;
+        } else {
+            throw new Error(data.error || 'Payment failed');
+        }
+    } catch (error) {
+        document.getElementById('paymentStatus').innerHTML = `<div style="color:#ef4444;">${error.message}</div>`;
+    } finally {
+        document.getElementById('payButton').innerHTML = '💳 Pay with M-Pesa';
+        document.getElementById('payButton').disabled = false;
+    }
+}
+
+// Check payment status
+async function checkPaymentStatus() {
+    if (!currentPaymentId) return;
+    
+    try {
+        const response = await fetch(`api/mpesa.php?payment_id=${currentPaymentId}`);
+        const payment = await response.json();
+        
+        if (payment.status === 'SUCCESS') {
+            document.getElementById('paymentStatus').innerHTML = `
+                <div style="background:#d1fae5; color:#065f46; padding:16px; border-radius:12px; text-align:center;">
+                    ✅ Payment Successful!<br>
+                    Receipt: ${payment.mpesa_receipt}<br>
+                    <a href="join_session.php?session_id=${payment.session_id}" class="btn" style="width:100%; margin-top:12px;">
+                        🎉 Enter Session Room
+                    </a>
+                </div>
+            `;
+        } else if (payment.status === 'PENDING') {
+            document.getElementById('paymentStatus').innerHTML += '<div>⏳ Still processing...</div>';
+            setTimeout(checkPaymentStatus, 3000);
+        }
+    } catch (error) {
+        console.error('Status check error:', error);
+    }
+}
+
+function closeModal() {
+    document.getElementById('paymentModal').style.display = 'none';
+}
+
+// Close modal on outside click
+document.getElementById('paymentModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+</script>
 </body>
 </html>

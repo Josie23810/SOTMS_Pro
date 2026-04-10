@@ -1,0 +1,7 @@
+{
+  "ipn_url": "https://www.example.com/ipns",
+  "notification_id": "710f1f90-f318-41db-8e3d-dba0df6c5c13",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1....stvlSklzaDmNRQE",
+  "expires_at": "2025-06-30T13:54:59.9990374Z",
+  "token_env": "sandbox"
+}

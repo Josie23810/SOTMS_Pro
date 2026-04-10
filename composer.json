@@ -2,7 +2,7 @@
     "name": "sotms/pro",
     "require": {
         "google/apiclient": "^1.1",
-        "paypal/rest-api-sdk-php": "^1.14",
-        "levizwannah/pesapal-sdk-php": "v1.1.2"
+        "levizwannah/pesapal-sdk-php": "v1.1.2",
+        "paypal/paypal-server-sdk": "^2.2"
     }
 }

@@ -1,4 +1,4 @@
-t<?php
+<?php
 require_once '../includes/auth_check.php';
 require_once '../config/db.php';
 checkAccess(['student']);
@@ -15,8 +15,8 @@ try {
         FROM tutor_materials tm 
         JOIN users u ON tm.tutor_id = u.id
         JOIN tutors t ON tm.tutor_id = t.user_id
-        JOIN sessions s ON tm.tutor_id = s.tutor_id 
-        WHERE s.student_id = ? AND s.status IN ('confirmed', 'completed')
+        JOIN sessions s ON t.id = s.tutor_id 
+        WHERE s.student_id = ? AND s.status = 'confirmed'
         ORDER BY tm.uploaded_at DESC
     ");
     $stmt->execute([$studentId]);
@@ -275,11 +275,6 @@ try {
 
         <div class="content">
             <?php if (empty($tutor_materials)): ?>
-                <div class="no-materials">
-                    <h3>No Tutor Materials Yet</h3>
-                    <p>Your tutors haven't uploaded any materials for your sessions. Check back after booking sessions or ask your tutor to share resources.</p>
-                    <a href="find_tutors.php" class="btn">Find Tutors</a>
-                </div>
             <?php else: ?>
                 <div class="tutor-materials-section">
                     <h2>Your Tutor Materials (<?php echo count($tutor_materials); ?>)</h2>

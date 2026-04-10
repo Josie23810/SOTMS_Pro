@@ -46,3 +46,15 @@
 
 ================================================================================================================================
 
+[03-04-2026 02:12:04] PayPal\Core\PayPalHttpConnection : INFO: POST https://api.sandbox.paypal.com/v1/oauth2/token
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : DEBUG: Request Headers 	: POST /v1/oauth2/token HTTP/2, Host: api.sandbox.paypal.com, user-agent: PayPalSDK/PayPal-PHP-SDK 1.14.0 (platform-ver=8.0.30; bit=64; os=Windows_NT_10.0; machine=AMD64; crypto-lib-ver=1.1.1t; curl=7.76.1), authorization: Basic QVlXSndsa0M0VTRidHhyNFFoakdxUmhEQ0trR0drQjNYN3Q2cEkwYk90QjktMWtLelZqZDh0VS1KN2RaMWhaSkxyVTdwSjhsN3pGNUEyaTU6RU5xOFFSNUpfMC1majNlQjJ3LXpnUjh5MW4yWjN3NHg1eTZ6N0E4QjlDMEQxRTJGM0c0SDVJNko3SzhMOU0=, accept: */*, content-length: 29, content-type: application/x-www-form-urlencoded, , 
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : DEBUG: Request Data		: grant_type=client_credentials
+--------------------------------------------------------------------------------------------------------------------------------
+
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : INFO: Response Status 	: 401
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : DEBUG: Response Headers	: content-type: application/json, content-length: 77, date: Fri, 03 Apr 2026 00:12:51 GMT, access-control-expose-headers: Server-Timing, cache-control: max-age=0, no-cache, no-store, must-revalidate, paypal-debug-id: 75a6339a0001c, pragma: no-cache, server-timing: traceparent;desc="00-000000000000000000075a6339a0001c-b86e076e00e7c8bc-01", vary: Accept-Encoding, x-paypal-token-service: IAAS, http_x_pp_az_locator: ccg18.slc, strict-transport-security: max-age=31536000; includeSubDomains, 
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : ERROR: Got Http response code 401 when accessing https://api.sandbox.paypal.com/v1/oauth2/token. {"error":"invalid_client","error_description":"Client Authentication failed"}
+[03-04-2026 02:12:07] PayPal\Core\PayPalHttpConnection : DEBUG: 
+
+================================================================================================================================
+

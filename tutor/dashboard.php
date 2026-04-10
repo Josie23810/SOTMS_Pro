@@ -37,16 +37,16 @@ $profileImage = null;
 $recentSessions = [];
 
 try {
-$stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE tutor_id = ? AND status IN ("pending", "confirmed") AND session_date >= NOW()');
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE tutor_id = ? AND status = "confirmed" AND session_date >= NOW()');
     $stmt->execute([$tutorId]);
     $upcomingSessions = $stmt->fetchColumn();
 
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE tutor_id = ? AND status = "pending"');
-$stmt->execute([$tutorId]);
+    $stmt->execute([$tutorId]);
     $pendingSessions = $stmt->fetchColumn();
 
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessions WHERE tutor_id = ? AND status = "completed"');
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$tutorId]);
     $completedSessions = $stmt->fetchColumn();
 
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND is_read = 0');
@@ -63,7 +63,7 @@ $stmt->execute([$tutorId]);
     $profileImage = $profileData['profile_image'] ?? null;
 
     $stmt = $pdo->prepare('SELECT s.id, s.session_date, s.status, u.name AS student_name FROM sessions s LEFT JOIN users u ON s.student_id = u.id WHERE s.tutor_id = ? ORDER BY s.session_date ASC LIMIT 5');
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$tutorId]);
     $recentSessions = $stmt->fetchAll();
 } catch (PDOException $e) {
     error_log('Tutor dashboard error: ' . $e->getMessage());

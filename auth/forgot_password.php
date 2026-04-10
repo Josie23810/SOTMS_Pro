@@ -38,48 +38,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <style>
         body {
             margin: 0;
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)),
-                        url('../uploads/image003.jpg') center/cover no-repeat;
-            color: #1f2937;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 32px;
+            padding: 10px;
+            background:
+                radial-gradient(circle at 10% 10%, rgba(236,72,153,0.22) 0%, rgba(236,72,153,0) 35%),
+                radial-gradient(circle at 90% 10%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0) 35%),
+                linear-gradient(135deg, #fff1f2 0%, #fdf4ff 45%, #ecfeff 100%);
+            font-family: 'Inter', sans-serif;
+            color: #1f2937;
         }
-        .card { width: min(540px, 100%); background: rgba(255,255,255,0.96); border-radius: 28px; box-shadow: 0 30px 80px rgba(15,23,42,0.16); padding: 36px; border: 1px solid rgba(148,163,184,0.24); }
-        .card h1 { margin: 0 0 14px; font-size: 2.3rem; }
-        .card p { margin: 0 0 24px; color: #475569; line-height: 1.7; }
-        label { display: block; font-weight: 700; margin-bottom: 10px; color: #334155; }
-        input { width: 100%; padding: 14px 16px; border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; font-size: 1rem; }
-        input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(59,130,246,0.14); }
-        .btn-primary { width: 100%; border: none; border-radius: 14px; padding: 16px 18px; background: #2563eb; color: white; font-weight: 700; cursor: pointer; transition: background 0.2s ease; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .message { padding: 16px; border-radius: 16px; margin-bottom: 18px; font-size: 0.95rem; }
-        .message.error { background: #fee2e2; color: #991b1b; }
-        .message.success { background: #dcfce7; color: #166534; }
-        .card-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 20px; color: #475569; }
-        .card-footer a { color: #2563eb; text-decoration: none; font-weight: 700; }
+        .compact-shell { width: min(760px, 96vw); border-radius: 16px; overflow: hidden; box-shadow: 0 22px 55px rgba(219,39,119,.14); border: 1px solid rgba(236,72,153,.2); background: rgba(255,255,255,.98); }
+        .compact-hero { padding: 14px 16px; background: linear-gradient(135deg, #7c3aed, #ec4899, #f59e0b); color: #fff; }
+        .compact-hero h1 { margin: 0; font-size: 1.2rem; font-family: 'Poppins', sans-serif; }
+        .compact-hero p { margin: 4px 0 0; font-size: 0.82rem; color: rgba(255,255,255,.92); }
+        .compact-content { padding: 12px 14px; background: linear-gradient(180deg, #fff, #fff7fb); }
+        .form-group label { display: block; font-size: .82rem; margin-bottom: 4px; font-weight: 600; color: #334155; }
+        input { width: 100%; box-sizing: border-box; padding: 7px 9px; font-size: .84rem; border-radius: 8px; border: 1px solid #fbcfe8; background: #fffdf8; }
+        input:focus { outline: none; border-color: #f472b6; box-shadow: 0 0 0 4px rgba(244,114,182,.24); background: #fff; }
+        .btn-primary { width: 100%; border: none; border-radius: 8px; padding: 8px 12px; font-size: .84rem; line-height: 1.2; background: linear-gradient(135deg, #ec4899, #8b5cf6, #f59e0b); color: #fff; font-weight: 700; cursor: pointer; }
+        .message { padding: 10px 12px; border-radius: 10px; margin-bottom: 10px; font-size: 0.84rem; }
+        .message.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: #475569; font-size: .8rem; }
+        .card-footer a { color: #7c2d12; text-decoration: none; font-weight: 700; background: #ffedd5; padding: 4px 8px; border-radius: 8px; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Forgot Password</h1>
-        <p>Enter the email address associated with your account. A reset code will be generated for you.</p>
+    <div class="compact-shell">
+        <div class="compact-hero">
+            <h1>Forgot Password</h1>
+            <p>Enter your email to generate a reset code.</p>
+        </div>
+        <div class="compact-content">
         <?php if ($error): ?>
             <div class="message error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
 
-        <form method="POST" action="forgot_password.php">
-            <label for="email">Email address</label>
-            <input id="email" name="email" type="email" autocomplete="email" required>
+        <form method="POST" action="forgot_password.php" class="compact-form">
+            <div class="form-group">
+                <label for="email">Email address</label>
+                <input id="email" name="email" type="email" autocomplete="email" required>
+            </div>
             <button type="submit" class="btn-primary">Send reset code</button>
         </form>
 
         <div class="card-footer">
             <span>Remembered your password?</span>
             <a href="login.php">Back to login</a>
+        </div>
         </div>
     </div>
 </body>

@@ -8,11 +8,40 @@ $message = '';
 $messageType = '';
 $students = [];
 $receivedMessages = [];
+$reply_subject = '';
+$reply_message_seed = '';
+$preselected_receiver_id = intval($_GET['to'] ?? 0);
 
 try {
     $stmt = $pdo->prepare('SELECT id, name, email FROM users WHERE role = "student" ORDER BY name');
     $stmt->execute();
     $students = $stmt->fetchAll();
+
+    if (isset($_GET['reply_to'])) {
+        $reply_to = intval($_GET['reply_to']);
+        if ($reply_to > 0) {
+            $stmt = $pdo->prepare('
+                SELECT m.*, u.name AS sender_name
+                FROM messages m
+                LEFT JOIN users u ON m.sender_id = u.id
+                WHERE m.id = ? AND m.receiver_id = ?
+                LIMIT 1
+            ');
+            $stmt->execute([$reply_to, $_SESSION['user_id']]);
+            $original = $stmt->fetch();
+
+            if ($original) {
+                $preselected_receiver_id = intval($original['sender_id']);
+                $cleanSubject = trim($original['subject'] ?? '');
+                $reply_subject = (stripos($cleanSubject, 'Re:') === 0) ? $cleanSubject : 'Re: ' . $cleanSubject;
+                $reply_message_seed =
+                    "\n\n--- Original Message ---\n" .
+                    "From: " . ($original['sender_name'] ?: 'Student') . "\n" .
+                    "Sent: " . date('M j, Y g:i A', strtotime($original['created_at'])) . "\n" .
+                    $original['message'];
+            }
+        }
+    }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $receiver_id = intval($_POST['receiver_id'] ?? 0);
@@ -101,18 +130,19 @@ try {
                             <label for="receiver_id">Student</label>
                             <select id="receiver_id" name="receiver_id" required>
                                 <option value="">Choose a student</option>
+                                <?php $selectedReceiver = isset($_POST['receiver_id']) ? intval($_POST['receiver_id']) : $preselected_receiver_id; ?>
                                 <?php foreach ($students as $student): ?>
-                                    <option value="<?php echo $student['id']; ?>"><?php echo htmlspecialchars($student['name']); ?></option>
+                                    <option value="<?php echo $student['id']; ?>" <?php echo $selectedReceiver === intval($student['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($student['name']); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="form-group">
                             <label for="subject">Subject</label>
-                            <input type="text" id="subject" name="subject" required>
+                            <input type="text" id="subject" name="subject" required value="<?php echo htmlspecialchars($_POST['subject'] ?? $reply_subject); ?>">
                         </div>
                         <div class="form-group">
                             <label for="message">Message</label>
-                            <textarea id="message" name="message" required></textarea>
+                            <textarea id="message" name="message" required><?php echo htmlspecialchars($_POST['message'] ?? $reply_message_seed); ?></textarea>
                         </div>
                         <button type="submit" class="btn">Send Message</button>
                     </form>
@@ -128,6 +158,9 @@ try {
                                 <h3><?php echo htmlspecialchars($msg['subject']); ?></h3>
                                 <div class="message-meta">From: <?php echo htmlspecialchars($msg['sender_name'] ?: 'Student'); ?> • <?php echo date('M j, Y g:i A', strtotime($msg['created_at'])); ?></div>
                                 <p class="message-body"><?php echo nl2br(htmlspecialchars($msg['message'])); ?></p>
+                                <div style="margin-top:10px;">
+                                    <a class="btn" style="padding:8px 14px; font-size:14px;" href="messages.php?reply_to=<?php echo intval($msg['id']); ?>">Reply</a>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>

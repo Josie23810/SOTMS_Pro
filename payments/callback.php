@@ -2,6 +2,7 @@
 // Pesapal callback - VERIFY PAYMENT
 require_once '../config/db.php';
 require_once '../config/pesapal.php';
+require_once '../includes/services/PaymentService.php';
 require_once '../vendor/autoload.php';
 use Pesapal\Pesapal;
 
@@ -16,30 +17,23 @@ if (empty($pesapal_txn_id) || empty($pesapal_merchant_reference)) {
 
 // Fetch payment
 try {
-    $stmt = $pdo->prepare("SELECT * FROM payments WHERE reference = ?");
-    $stmt->execute([$pesapal_merchant_reference]);
-    $payment = $stmt->fetch();
+    $payment = PaymentService::findPaymentByReference($pdo, $pesapal_merchant_reference);
     
-    if (!$payment || $payment['status'] !== 'pending') {
+    if (!$payment || !in_array($payment['status'], ['pending', 'gateway_submitted'], true)) {
         http_response_code(400);
         echo 'Payment not found or already processed';
         exit();
     }
-
+    
     // Real Pesapal verify
     $pesapal_config = require '../config/pesapal.php';
     $status = Pesapal::transactionStatus($pesapal_txn_id, $pesapal_config['consumer_key'], $pesapal_config['consumer_secret'], $pesapal_config['environment']);
     
     $payment_status = ($status === 'COMPLETED' || $status === 'PAID') ? 'paid' : 'failed';
-    $session_id = $payment['session_id'];
-    
-    // Update payments
-    $stmt = $pdo->prepare("UPDATE payments SET status = ?, pesapal_txn_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-    $stmt->execute([$payment_status, $pesapal_txn_id, $payment['id']]);
-    
-    // Update session
-    $stmt = $pdo->prepare("UPDATE sessions SET payment_status = ? WHERE id = ?");
-    $stmt->execute([$payment_status, $session_id]);
+    PaymentService::transitionPaymentStatus($pdo, $payment['id'], $payment_status, null, 'Pesapal callback verification processed.', [
+        'pesapal_txn_id' => $pesapal_txn_id,
+        'gateway_status' => $status
+    ]);
     
     echo 'OK';
     

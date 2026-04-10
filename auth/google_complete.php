@@ -1,6 +1,8 @@
 <?php
-session_start();
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+startAppSession();
 
 if (empty($_SESSION['google_oauth_email']) || empty($_SESSION['google_oauth_name'])) {
     header('Location: login.php');
@@ -18,9 +20,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$password || !$confirm_password) {
         $error = 'Please create and confirm your password.';
+    } elseif (!isValidPublicRole($role)) {
+        $error = 'Please select a valid public account type.';
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
-    } elseif (!preg_match('/(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}/', $password)) {
+    } elseif (!passwordMeetsPolicy($password)) {
         $error = 'Password must be at least 8 characters and include uppercase, lowercase, and a number.';
     } else {
         try {
@@ -86,7 +90,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <select id="role" name="role">
                 <option value="student">Student</option>
                 <option value="tutor">Tutor</option>
-                <option value="admin">Admin</option>
             </select>
             <label for="password">Create password</label>
             <input id="password" name="password" type="password" autocomplete="new-password" required oninput="updatePasswordStrength()">

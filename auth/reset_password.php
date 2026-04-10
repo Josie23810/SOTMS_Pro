@@ -1,6 +1,8 @@
 <?php
-session_start();
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+startAppSession();
 
 if (empty($_SESSION['reset_email']) || empty($_SESSION['reset_code'])) {
     header('Location: forgot_password.php');
@@ -11,6 +13,14 @@ $error = '';
 $success = '';
 $displayCode = $_SESSION['reset_code'];
 $email = $_SESSION['reset_email'];
+$codeGeneratedAt = intval($_SESSION['reset_code_generated'] ?? 0);
+$codeIsExpired = !$codeGeneratedAt || (time() - $codeGeneratedAt) > 900;
+
+if ($codeIsExpired) {
+    unset($_SESSION['reset_email'], $_SESSION['reset_code'], $_SESSION['reset_code_generated']);
+    header('Location: forgot_password.php');
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $code = trim($_POST['code'] ?? '');
@@ -19,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($code !== (string)$_SESSION['reset_code']) {
         $error = 'The reset code does not match. Please try again.';
-    } elseif (!preg_match('/(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}/', $password)) {
+    } elseif (!passwordMeetsPolicy($password)) {
         $error = 'Password must be at least 8 characters and include uppercase, lowercase, and a number.';
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';

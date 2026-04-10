@@ -1,6 +1,7 @@
 ﻿<?php
 // Include the database connection.
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
 
 $error = '';
 
@@ -15,9 +16,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'All fields are required.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
+    } elseif (!isValidPublicRole($role)) {
+        $error = 'Please select a valid public account type.';
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
-    } elseif (!preg_match('/(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}/', $password)) {
+    } elseif (!passwordMeetsPolicy($password)) {
         $error = 'Password must be at least 8 characters and include uppercase, lowercase, and a number.';
     } else {
         try {
@@ -110,7 +113,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <select id="role" name="role">
                             <option value="student" <?php echo (isset($role) && $role === 'student') ? 'selected' : ''; ?>>Student</option>
                             <option value="tutor" <?php echo (isset($role) && $role === 'tutor') ? 'selected' : ''; ?>>Tutor</option>
-                            <option value="admin" <?php echo (isset($role) && $role === 'admin') ? 'selected' : ''; ?>>Admin</option>
                         </select>
                     </div>
                     <div>

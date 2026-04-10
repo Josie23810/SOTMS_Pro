@@ -1,119 +1,103 @@
 <?php
 require_once '../includes/auth_check.php';
 require_once '../config/db.php';
+require_once '../includes/user_helpers.php';
+require_once '../includes/upload_helpers.php';
+require_once '../includes/services/ProfileTaxonomyService.php';
+require_once '../includes/services/TutorVerificationService.php';
 checkAccess(['tutor']);
+
+ensurePlatformStructures($pdo);
+$catalogOptions = ProfileTaxonomyService::getCatalogOptions($pdo);
+getTutorId($pdo, $_SESSION['user_id']);
 
 $message = '';
 $messageType = '';
 
-try {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS tutor_profiles (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL UNIQUE,
-        profile_image VARCHAR(255),
-        full_name VARCHAR(100),
-        phone VARCHAR(20),
-        subjects_taught TEXT,
-        qualifications TEXT,
-        bio TEXT,
-        experience TEXT,
-        hourly_rate VARCHAR(50),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    // Add qualification document column if it doesn't exist
-    $columnCheck = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'qualification_document'");
-    if (!$columnCheck->fetch()) {
-        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN qualification_document VARCHAR(255) NULL AFTER qualifications");
-    }
-
-    // Add availability and capacity columns if missing
-    $availabilityDaysCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_days'");
-    if (!$availabilityDaysCol->fetch()) {
-        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_days TEXT NULL AFTER hourly_rate");
-    }
-
-    $availabilityStartCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_start'");
-    if (!$availabilityStartCol->fetch()) {
-        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_start VARCHAR(20) NULL AFTER availability_days");
-    }
-
-    $availabilityEndCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'availability_end'");
-    if (!$availabilityEndCol->fetch()) {
-        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN availability_end VARCHAR(20) NULL AFTER availability_start");
-    }
-
-    $maxSessionsCol = $pdo->query("SHOW COLUMNS FROM tutor_profiles LIKE 'max_sessions_per_day'");
-    if (!$maxSessionsCol->fetch()) {
-        $pdo->exec("ALTER TABLE tutor_profiles ADD COLUMN max_sessions_per_day INT NULL AFTER availability_end");
-    }
-} catch (PDOException $e) {
-    error_log('Tutor profile table creation error: ' . $e->getMessage());
-}
+$userStmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
+$userStmt->execute([$_SESSION['user_id']]);
+$account = $userStmt->fetch();
+$accountEmail = $account['email'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $existingProfile = fetchTutorProfile($pdo, $_SESSION['user_id']);
     $full_name = trim($_POST['full_name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
+    $email = trim($_POST['email'] ?? $accountEmail);
+    $id_number = trim($_POST['id_number'] ?? '');
+    $age = intval($_POST['age'] ?? 0);
     $subjects_taught = trim($_POST['subjects_taught'] ?? '');
+    $curriculum_specialties = trim($_POST['curriculum_specialties'] ?? '');
+    $study_levels_supported = trim($_POST['study_levels_supported'] ?? '');
     $qualifications = trim($_POST['qualifications'] ?? '');
     $bio = trim($_POST['bio'] ?? '');
     $experience = trim($_POST['experience'] ?? '');
     $hourly_rate = trim($_POST['hourly_rate'] ?? '');
+    $location = trim($_POST['location'] ?? '');
+    $service_areas = trim($_POST['service_areas'] ?? '');
     $availability_days = isset($_POST['availability_days']) && is_array($_POST['availability_days']) ? implode(',', $_POST['availability_days']) : '';
     $availability_start = trim($_POST['availability_start'] ?? '');
     $availability_end = trim($_POST['availability_end'] ?? '');
-    $max_sessions_per_day = intval($_POST['max_sessions_per_day'] ?? 0);
+    $delivery_mode = trim($_POST['delivery_mode'] ?? 'both');
+    $location_note = trim($_POST['location_note'] ?? '');
+    $max_sessions_per_day = max(1, intval($_POST['max_sessions_per_day'] ?? 1));
+    $verification_status = TutorVerificationService::determineStatusForProfileUpdate($existingProfile, [
+        'full_name' => $full_name,
+        'email' => $email,
+        'id_number' => $id_number,
+        'qualifications' => $qualifications
+    ], false);
 
     $profile_image = '';
-    if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
-        $upload_dir = '../uploads/profiles/';
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
-        }
-
-        $file_extension = strtolower(pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION));
-        $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif'];
-
-        if (in_array($file_extension, $allowed_extensions)) {
-            $new_filename = 'profile_' . $_SESSION['user_id'] . '_' . time() . '.' . $file_extension;
-            $upload_path = $upload_dir . $new_filename;
-
-            if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $upload_path)) {
-                $profile_image = 'uploads/profiles/' . $new_filename;
-            } else {
-                $message = 'Failed to upload image.';
-                $messageType = 'error';
+    if (empty($message)) {
+        try {
+            $upload = saveUploadedFile(
+                'profile_image',
+                dirname(__DIR__) . '/uploads/profiles',
+                'uploads/profiles',
+                ['jpg', 'jpeg', 'png', 'gif'],
+                ['image/jpeg', 'image/png', 'image/gif'],
+                'profile_' . $_SESSION['user_id'],
+                5 * 1024 * 1024
+            );
+            if ($upload) {
+                $profile_image = $upload['path'];
             }
-        } else {
-            $message = 'Invalid image format. Please use JPG, PNG, or GIF.';
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
             $messageType = 'error';
         }
     }
 
     $qualification_document = '';
-    if (isset($_FILES['qualification_document']) && $_FILES['qualification_document']['error'] === UPLOAD_ERR_OK) {
-        $doc_upload_dir = '../uploads/tutor_qualifications/';
-        if (!is_dir($doc_upload_dir)) {
-            mkdir($doc_upload_dir, 0755, true);
-        }
-
-        $doc_extension = strtolower(pathinfo($_FILES['qualification_document']['name'], PATHINFO_EXTENSION));
-        $allowed_doc_extensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
-
-        if (in_array($doc_extension, $allowed_doc_extensions)) {
-            $doc_filename = 'qualification_' . $_SESSION['user_id'] . '_' . time() . '.' . $doc_extension;
-            $doc_upload_path = $doc_upload_dir . $doc_filename;
-
-            if (move_uploaded_file($_FILES['qualification_document']['tmp_name'], $doc_upload_path)) {
-                $qualification_document = 'uploads/tutor_qualifications/' . $doc_filename;
-            } else {
-                $message = 'Failed to upload qualification document.';
-                $messageType = 'error';
+    if (empty($message)) {
+        try {
+            $upload = saveUploadedFile(
+                'qualification_document',
+                dirname(__DIR__) . '/uploads/tutor_qualifications',
+                'uploads/tutor_qualifications',
+                ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+                [
+                    'application/pdf',
+                    'application/msword',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'image/jpeg',
+                    'image/png'
+                ],
+                'qualification_' . $_SESSION['user_id'],
+                8 * 1024 * 1024
+            );
+            if ($upload) {
+                $qualification_document = $upload['path'];
+                $verification_status = TutorVerificationService::determineStatusForProfileUpdate($existingProfile, [
+                    'full_name' => $full_name,
+                    'email' => $email,
+                    'id_number' => $id_number,
+                    'qualifications' => $qualifications
+                ], true);
             }
-        } else {
-            $message = 'Invalid qualification document format. Use PDF, DOC, DOCX, JPG, or PNG.';
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
             $messageType = 'error';
         }
     }
@@ -125,8 +109,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existing = $stmt->fetch();
 
             if ($existing) {
-                $sql = 'UPDATE tutor_profiles SET full_name = ?, phone = ?, subjects_taught = ?, qualifications = ?, bio = ?, experience = ?, hourly_rate = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_sessions_per_day = ?';
-                $params = [$full_name, $phone, $subjects_taught, $qualifications, $bio, $experience, $hourly_rate, $availability_days, $availability_start, $availability_end, $max_sessions_per_day];
+                $sql = 'UPDATE tutor_profiles
+                        SET full_name = ?, phone = ?, email = ?, id_number = ?, age = ?, subjects_taught = ?, curriculum_specialties = ?, study_levels_supported = ?, qualifications = ?, bio = ?, experience = ?, hourly_rate = ?, location = ?, service_areas = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_sessions_per_day = ?, verification_status = ?';
+                $params = [
+                    $full_name,
+                    $phone,
+                    $email,
+                    $id_number,
+                    $age ?: null,
+                    $subjects_taught,
+                    $curriculum_specialties,
+                    $study_levels_supported,
+                    $qualifications,
+                    $bio,
+                    $experience,
+                    $hourly_rate,
+                    $location,
+                    $service_areas,
+                    $availability_days,
+                    $availability_start,
+                    $availability_end,
+                    $max_sessions_per_day,
+                    $verification_status
+                ];
 
                 if (!empty($profile_image)) {
                     $sql .= ', profile_image = ?';
@@ -144,9 +149,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute($params);
             } else {
-                $stmt = $pdo->prepare('INSERT INTO tutor_profiles (user_id, profile_image, full_name, phone, subjects_taught, qualifications, qualification_document, bio, experience, hourly_rate, availability_days, availability_start, availability_end, max_sessions_per_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$_SESSION['user_id'], $profile_image, $full_name, $phone, $subjects_taught, $qualifications, $qualification_document, $bio, $experience, $hourly_rate, $availability_days, $availability_start, $availability_end, $max_sessions_per_day]);
+                $stmt = $pdo->prepare('
+                    INSERT INTO tutor_profiles (
+                        user_id, profile_image, full_name, phone, email, id_number, age, subjects_taught,
+                        curriculum_specialties, study_levels_supported, qualifications, qualification_document,
+                        bio, experience, hourly_rate, location, service_areas, availability_days,
+                        availability_start, availability_end, max_sessions_per_day, verification_status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ');
+                $stmt->execute([
+                    $_SESSION['user_id'],
+                    $profile_image,
+                    $full_name,
+                    $phone,
+                    $email,
+                    $id_number,
+                    $age ?: null,
+                    $subjects_taught,
+                    $curriculum_specialties,
+                    $study_levels_supported,
+                    $qualifications,
+                    $qualification_document,
+                    $bio,
+                    $experience,
+                    $hourly_rate,
+                    $location,
+                    $service_areas,
+                    $availability_days,
+                    $availability_start,
+                    $availability_end,
+                    $max_sessions_per_day,
+                    $verification_status
+                ]);
             }
+
+            ProfileTaxonomyService::syncTutorProfile($pdo, $_SESSION['user_id'], [
+                'subjects_taught' => $subjects_taught,
+                'curriculum_specialties' => $curriculum_specialties,
+                'study_levels_supported' => $study_levels_supported,
+                'service_areas' => $service_areas,
+                'availability_days' => isset($_POST['availability_days']) && is_array($_POST['availability_days']) ? $_POST['availability_days'] : [],
+                'availability_start' => $availability_start,
+                'availability_end' => $availability_end,
+                'delivery_mode' => $delivery_mode,
+                'location_note' => $location_note
+            ]);
 
             header('Location: dashboard.php');
             exit;
@@ -158,14 +205,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$profile = null;
-try {
-    $stmt = $pdo->prepare('SELECT * FROM tutor_profiles WHERE user_id = ?');
-    $stmt->execute([$_SESSION['user_id']]);
-    $profile = $stmt->fetch();
-} catch (PDOException $e) {
-    error_log('Tutor profile fetch error: ' . $e->getMessage());
-}
+$profile = fetchTutorProfile($pdo, $_SESSION['user_id']);
+$savedDays = !empty($profile['availability_days']) ? array_map('trim', explode(',', $profile['availability_days'])) : [];
+$availabilitySlots = $profile['availability_slots'] ?? [];
+$primarySlot = $availabilitySlots[0] ?? [];
+$defaultDeliveryMode = $primarySlot['delivery_mode'] ?? 'both';
+$slotLocationNote = $primarySlot['location_note'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -184,9 +229,9 @@ try {
             padding: 20px;
         }
         .container {
-            max-width: 1000px;
+            max-width: 1120px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.95);
+            background: rgba(255,255,255,0.96);
             border-radius: 16px;
             box-shadow: 0 20px 40px rgba(15,23,42,0.15);
             overflow: hidden;
@@ -197,31 +242,49 @@ try {
             padding: 30px;
             text-align: center;
         }
-        .header h1 { margin: 0; font-size: 2.5rem; }
-        .header p { margin: 10px 0 0; opacity: 0.9; }
         .nav { background: #f8fafc; padding: 20px; border-bottom: 1px solid #e2e8f0; text-align: center; }
-        .nav a { color: #2563eb; text-decoration: none; margin: 0 12px; font-weight: 600; padding: 10px 14px; border-radius: 8px; transition: background 0.2s; }
+        .nav a { color: #2563eb; text-decoration: none; margin: 0 12px; font-weight: 600; padding: 10px 14px; border-radius: 8px; }
         .nav a:hover { background: #e0f2fe; }
         .content { padding: 30px; }
-        .profile-grid { display: grid; grid-template-columns: 300px 1fr; gap: 30px; }
-        .profile-image-section { background: #f8fafc; border-radius: 12px; padding: 22px; text-align: center; border: 1px solid #e2e8f0; }
-        .current-image { width: 200px; height: 200px; border-radius: 50%; object-fit: cover; border: 4px solid #e2e8f0; margin-bottom: 20px; }
-        .profile-form { background: #f8fafc; border-radius: 12px; padding: 22px; border: 1px solid #e2e8f0; }
+        .profile-grid { display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+        .profile-image-section, .profile-form {
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 22px;
+            border: 1px solid #e2e8f0;
+        }
+        .current-image {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
         .form-section { margin-bottom: 28px; }
-        .form-section h3 { margin: 0 0 18px; color: #1f2937; font-size: 1.2rem; }
+        .form-section h3 { margin: 0 0 16px; font-size: 1.18rem; }
+        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
         .form-group { margin-bottom: 16px; }
-        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #374151; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 13px 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 1rem; background: white; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #374151; }
+        .form-group input, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; box-sizing: border-box; background: white; }
         .form-group textarea { min-height: 100px; resize: vertical; }
-        .btn { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+        .btn { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .btn:hover { background: #1d4ed8; }
-        .message { padding: 16px; border-radius: 12px; margin-bottom: 24px; }
+        .message { padding: 15px; border-radius: 10px; margin-bottom: 20px; }
         .success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
         .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .tag-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-        .tag-item { background: #e0f2fe; color: #2563eb; padding: 8px 12px; border-radius: 999px; font-size: 0.95rem; }
+        .status-chip {
+            display: inline-flex;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-weight: 700;
+            font-size: 0.84rem;
+        }
+        .help-text { color: #64748b; font-size: 0.9rem; margin-top: 6px; }
         @media (max-width: 768px) {
-            .profile-grid { grid-template-columns: 1fr; }
+            .profile-grid, .form-grid { grid-template-columns: 1fr; }
             .current-image { width: 160px; height: 160px; }
         }
     </style>
@@ -230,11 +293,12 @@ try {
     <div class="container">
         <div class="header">
             <h1>Tutor Profile</h1>
-            <p>Manage your public tutor profile, teaching specialties, and availability details.</p>
+            <p>Complete your tutor profile with your ID, age, email, qualifications, curriculum focus, and service area so students can find you.</p>
         </div>
         <div class="nav">
-            <a href="dashboard.php">← Back to Dashboard</a>
-            <a href="messages.php">Messages</a>
+            <a href="dashboard.php">Back to Dashboard</a>
+            <a href="schedule.php">Manage Schedule</a>
+            <a href="upload_materials.php">Upload Materials</a>
             <a href="settings.php">Settings</a>
         </div>
         <div class="content">
@@ -242,110 +306,154 @@ try {
                 <div class="message <?php echo htmlspecialchars($messageType); ?>"><?php echo htmlspecialchars($message); ?></div>
             <?php endif; ?>
 
+            <div style="margin-bottom:20px;">
+                <span class="status-chip">Verification Status: <?php echo htmlspecialchars(ucfirst($profile['verification_status'] ?? 'submitted')); ?></span>
+            </div>
+
             <form method="POST" enctype="multipart/form-data">
                 <div class="profile-grid">
                     <div class="profile-image-section">
                         <h3>Profile Picture</h3>
-                        <?php if ($profile && $profile['profile_image']): ?>
+                        <?php if ($profile && !empty($profile['profile_image'])): ?>
                             <img src="../<?php echo htmlspecialchars($profile['profile_image']); ?>" alt="Profile Image" class="current-image">
                         <?php else: ?>
-                            <div class="current-image" style="background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-size:48px; color:#6b7280;">👤</div>
+                            <div class="current-image" style="background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-size:48px; color:#6b7280;">
+                                <?php echo htmlspecialchars(strtoupper(substr($_SESSION['name'], 0, 1))); ?>
+                            </div>
                         <?php endif; ?>
                         <div class="form-group" style="margin-top:24px;">
                             <label for="profile_image">Upload New Image</label>
                             <input type="file" id="profile_image" name="profile_image" accept="image/*">
                         </div>
                     </div>
+
                     <div class="profile-form">
                         <div class="form-section">
-                            <h3>Personal Details</h3>
-                            <div class="form-group">
-                                <label for="full_name">Full Name</label>
-                                <input type="text" id="full_name" name="full_name" value="<?php echo htmlspecialchars($profile['full_name'] ?? ''); ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="phone">Phone Number</label>
-                                <input type="tel" id="phone" name="phone" value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>">
-                            </div>
-                            <div class="form-group">
-                                <label for="hourly_rate">Hourly Rate</label>
-                                <input type="text" id="hourly_rate" name="hourly_rate" value="<?php echo htmlspecialchars($profile['hourly_rate'] ?? ''); ?>" placeholder="e.g. $25/hr">
+                            <h3>Personal Information</h3>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="full_name">Full Name</label>
+                                    <input type="text" id="full_name" name="full_name" value="<?php echo htmlspecialchars($profile['full_name'] ?? ''); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="phone">Phone Number</label>
+                                    <input type="tel" id="phone" name="phone" value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label for="email">Email</label>
+                                    <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($profile['email'] ?? $accountEmail); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="id_number">ID Number</label>
+                                    <input type="text" id="id_number" name="id_number" value="<?php echo htmlspecialchars($profile['id_number'] ?? ''); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="age">Age</label>
+                                    <input type="number" id="age" name="age" min="18" max="100" value="<?php echo htmlspecialchars((string) ($profile['age'] ?? '')); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label for="location">Primary Location</label>
+                                    <input type="text" id="location" name="location" value="<?php echo htmlspecialchars($profile['location'] ?? ''); ?>" placeholder="e.g. Nairobi, Kisumu, Eldoret">
+                                </div>
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label for="service_areas">Geographical Areas You Serve</label>
+                                    <input type="text" id="service_areas" name="service_areas" value="<?php echo htmlspecialchars($profile['service_areas_display'] ?? ($profile['service_areas'] ?? '')); ?>" placeholder="Westlands, Kilimani, Online, Nakuru">
+                                    <div class="help-text">Suggested service areas: <?php echo htmlspecialchars(implode(', ', $catalogOptions['service_areas'])); ?></div>
+                                </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3>Teaching Focus</h3>
+                            <h3>Teaching Profile</h3>
                             <div class="form-group">
                                 <label for="subjects_taught">Subjects Taught</label>
-                                <textarea id="subjects_taught" name="subjects_taught" placeholder="Math, Science, English, Computer Science, etc."><?php echo htmlspecialchars($profile['subjects_taught'] ?? ''); ?></textarea>
+                                <textarea id="subjects_taught" name="subjects_taught" placeholder="Math, Physics, Chemistry, English"><?php echo htmlspecialchars($profile['subjects_taught_display'] ?? ($profile['subjects_taught'] ?? '')); ?></textarea>
+                                <div class="help-text">Suggested subjects: <?php echo htmlspecialchars(implode(', ', array_slice($catalogOptions['subjects'], 0, 10))); ?></div>
                             </div>
-                            <?php if ($profile && $profile['subjects_taught']): ?>
-                                <div class="tag-list">
-                                    <?php
-                                    foreach (explode(',', $profile['subjects_taught']) as $subject) {
-                                        $subject = trim($subject);
-                                        if ($subject) {
-                                            echo '<span class="tag-item">' . htmlspecialchars($subject) . '</span>';
-                                        }
-                                    }
-                                    ?>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="curriculum_specialties">Curriculum Specialties</label>
+                                    <input type="text" id="curriculum_specialties" name="curriculum_specialties" value="<?php echo htmlspecialchars($profile['curriculum_specialties_display'] ?? ($profile['curriculum_specialties'] ?? '')); ?>" placeholder="CBC, 8-4-4, IGCSE, IB">
+                                    <div class="help-text">Suggested curricula: <?php echo htmlspecialchars(implode(', ', $catalogOptions['curricula'])); ?></div>
                                 </div>
-                            <?php endif; ?>
+                                <div class="form-group">
+                                    <label for="study_levels_supported">Study Levels Supported</label>
+                                    <input type="text" id="study_levels_supported" name="study_levels_supported" value="<?php echo htmlspecialchars($profile['study_levels_supported_display'] ?? ($profile['study_levels_supported'] ?? '')); ?>" placeholder="Grade 8, Form 4, University Year 1">
+                                    <div class="help-text">Suggested levels: <?php echo htmlspecialchars(implode(', ', array_slice($catalogOptions['study_levels'], 0, 8))); ?></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="hourly_rate">Session Rate (KSh)</label>
+                                    <input type="text" id="hourly_rate" name="hourly_rate" value="<?php echo htmlspecialchars($profile['hourly_rate'] ?? ''); ?>" placeholder="e.g. 1500">
+                                </div>
+                                <div class="form-group">
+                                    <label for="max_sessions_per_day">Maximum Sessions Per Day</label>
+                                    <input type="number" id="max_sessions_per_day" name="max_sessions_per_day" min="1" max="20" value="<?php echo htmlspecialchars((string) ($profile['max_sessions_per_day'] ?? 4)); ?>">
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-section">
-                            <h3>Availability & Capacity</h3>
-                            <?php $savedDays = !empty($profile['availability_days']) ? array_map('trim', explode(',', $profile['availability_days'])) : []; ?>
+                            <h3>Availability</h3>
+                            <?php if (!empty($profile['availability_summary'])): ?>
+                                <div class="help-text" style="margin-bottom:12px;">Saved availability slots: <?php echo htmlspecialchars($profile['availability_summary']); ?></div>
+                            <?php endif; ?>
                             <div class="form-group">
                                 <label>Available Days</label>
-                                <div style="display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px;">
-                                    <?php
-                                    $daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-                                    foreach ($daysOfWeek as $day):
-                                    ?>
+                                <div class="form-grid">
+                                    <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $day): ?>
                                         <label style="display:flex; gap:8px; align-items:center; margin:0; font-weight:500;">
-                                            <input type="checkbox" name="availability_days[]" value="<?php echo $day; ?>" <?php echo in_array($day, $savedDays) ? 'checked' : ''; ?> style="width:auto;">
+                                            <input type="checkbox" name="availability_days[]" value="<?php echo $day; ?>" <?php echo in_array($day, $savedDays, true) ? 'checked' : ''; ?> style="width:auto;">
                                             <?php echo $day; ?>
                                         </label>
                                     <?php endforeach; ?>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="availability_start">Available From</label>
-                                <input type="time" id="availability_start" name="availability_start" value="<?php echo htmlspecialchars($profile['availability_start'] ?? ''); ?>">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="availability_start">Available From</label>
+                                    <input type="time" id="availability_start" name="availability_start" value="<?php echo htmlspecialchars($profile['availability_start'] ?? ''); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label for="availability_end">Available To</label>
+                                    <input type="time" id="availability_end" name="availability_end" value="<?php echo htmlspecialchars($profile['availability_end'] ?? ''); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label for="delivery_mode">Delivery Mode</label>
+                                    <select id="delivery_mode" name="delivery_mode" style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:10px; font-size:15px; box-sizing:border-box; background:white;">
+                                        <option value="both" <?php echo $defaultDeliveryMode === 'both' ? 'selected' : ''; ?>>Online and In-person</option>
+                                        <option value="online" <?php echo $defaultDeliveryMode === 'online' ? 'selected' : ''; ?>>Online Only</option>
+                                        <option value="in_person" <?php echo $defaultDeliveryMode === 'in_person' ? 'selected' : ''; ?>>In-person Only</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="location_note">Availability Note</label>
+                                    <input type="text" id="location_note" name="location_note" value="<?php echo htmlspecialchars($slotLocationNote); ?>" placeholder="e.g. Online via Google Meet, Westlands only">
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="availability_end">Available To</label>
-                                <input type="time" id="availability_end" name="availability_end" value="<?php echo htmlspecialchars($profile['availability_end'] ?? ''); ?>">
-                            </div>
-                            <div class="form-group">
-                                <label for="max_sessions_per_day">Maximum Sessions Per Day</label>
-                                <input type="number" id="max_sessions_per_day" name="max_sessions_per_day" min="1" max="20" value="<?php echo htmlspecialchars($profile['max_sessions_per_day'] ?? ''); ?>" placeholder="e.g. 5">
-                            </div>
+                            <div class="help-text">Each selected day is now stored as its own availability slot to make booking checks more accurate.</div>
                         </div>
 
                         <div class="form-section">
-                            <h3>Professional Background</h3>
+                            <h3>Qualifications & Experience</h3>
                             <div class="form-group">
                                 <label for="qualifications">Qualifications</label>
-                                <textarea id="qualifications" name="qualifications" placeholder="Degrees, certifications, or training programs."><?php echo htmlspecialchars($profile['qualifications'] ?? ''); ?></textarea>
+                                <textarea id="qualifications" name="qualifications" placeholder="Degrees, certifications, licenses, and teaching credentials"><?php echo htmlspecialchars($profile['qualifications'] ?? ''); ?></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="qualification_document">Upload Qualification Certificate/Document</label>
+                                <label for="qualification_document">Qualification / ID Document Upload</label>
                                 <input type="file" id="qualification_document" name="qualification_document" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                                <div class="help-text">Upload a certificate, transcript, or identification document for admin verification.</div>
                                 <?php if (!empty($profile['qualification_document'])): ?>
-                                    <p style="margin-top:10px;">
-                                        <a href="../<?php echo htmlspecialchars($profile['qualification_document']); ?>" target="_blank" class="btn">View Current Qualification Document</a>
-                                    </p>
+                                    <p style="margin-top:10px;"><a href="../<?php echo htmlspecialchars($profile['qualification_document']); ?>" target="_blank" class="btn">View Current Document</a></p>
                                 <?php endif; ?>
                             </div>
                             <div class="form-group">
                                 <label for="experience">Experience</label>
-                                <textarea id="experience" name="experience" placeholder="Years of teaching experience, coaching highlights, and successes."><?php echo htmlspecialchars($profile['experience'] ?? ''); ?></textarea>
+                                <textarea id="experience" name="experience" placeholder="Years of teaching, specialties, coaching history"><?php echo htmlspecialchars($profile['experience'] ?? ''); ?></textarea>
                             </div>
                             <div class="form-group">
                                 <label for="bio">About You</label>
-                                <textarea id="bio" name="bio" placeholder="Describe your tutoring style, approach, and what makes you a great tutor."><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
+                                <textarea id="bio" name="bio" placeholder="Describe your teaching style, strengths, and what students can expect"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
                             </div>
                         </div>
 

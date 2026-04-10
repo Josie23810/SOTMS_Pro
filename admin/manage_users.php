@@ -1,7 +1,9 @@
 <?php
 require_once '../includes/auth_check.php';
 require_once '../config/db.php';
+require_once '../includes/user_helpers.php';
 checkAccess(['admin']);
+ensurePlatformStructures($pdo);
 
 $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -32,7 +34,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Fetch all users
-$stmt = $pdo->query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC');
+$stmt = $pdo->query("
+    SELECT u.id, u.name, u.email, u.role, u.created_at, tp.verification_status
+    FROM users u
+    LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
+    ORDER BY u.created_at DESC
+");
 $users = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -100,6 +107,7 @@ $users = $stmt->fetchAll();
                         <th>Email</th>
                         <th>Role</th>
                         <th>Registered</th>
+                        <th>Verification</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -111,8 +119,12 @@ $users = $stmt->fetchAll();
                             <td><?php echo htmlspecialchars($user['email']); ?></td>
                             <td><span class="role-badge role-<?php echo strtolower($user['role']); ?>"><?php echo ucfirst($user['role']); ?></span></td>
                             <td><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
+                            <td><?php echo htmlspecialchars($user['role'] === 'tutor' ? str_replace('_', ' ', ($user['verification_status'] ?? 'submitted')) : 'N/A'); ?></td>
                             <td>
                                 <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="action-btn btn-edit">Edit</a>
+                                <?php if ($user['role'] === 'tutor'): ?>
+                                    <a href="tutor_verifications.php" class="action-btn btn-edit" style="background:#2563eb;">Review Tutor</a>
+                                <?php endif; ?>
                                 <?php if ($user['role'] !== 'admin'): ?>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Delete <?php echo htmlspecialchars($user['name']); ?>?');">
                                         <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">

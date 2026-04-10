@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
 
 $source = $_GET['source'] ?? 'login';
 
@@ -24,9 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Please complete all registration fields.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
+    } elseif (!isValidPublicRole($role)) {
+        $error = 'Please select a valid public account type.';
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
-    } elseif (!preg_match('/(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}/', $password)) {
+    } elseif (!passwordMeetsPolicy($password)) {
         $error = 'Password must be at least 8 characters and include uppercase, lowercase, and a number.';
     } else {
         try {
@@ -89,7 +92,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <select id="role" name="role">
                 <option value="student">Student</option>
                 <option value="tutor">Tutor</option>
-                <option value="admin">Admin</option>
             </select>
             <label for="password">Create password</label>
             <input id="password" name="password" type="password" autocomplete="new-password" required oninput="updatePasswordStrength()">

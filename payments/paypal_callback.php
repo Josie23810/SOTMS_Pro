@@ -1,5 +1,6 @@
-this pesa<?php
+<?php
 require_once '../config/db.php';
+require_once '../includes/services/PaymentService.php';
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 use PayPal\Api\Payment;
@@ -38,13 +39,14 @@ try {
     if ($result->getState() === 'approved') {
         $paymentRecord = $payment->getTransactions()[0];
         $reference = $paymentRecord->getCustom();
-        
-        // Update database
-        $stmt = $pdo->prepare("UPDATE payments SET status = 'paid', paypal_payment_id = ? WHERE reference = ?");
-        $stmt->execute([$paymentId, $reference]);
-        
-        $stmt = $pdo->prepare("UPDATE sessions SET payment_status = 'paid' WHERE id = (SELECT session_id FROM payments WHERE reference = ?)");
-        $stmt->execute([$reference]);
+
+        $paymentRow = PaymentService::findPaymentByReference($pdo, $reference);
+        if ($paymentRow) {
+            PaymentService::transitionPaymentStatus($pdo, $paymentRow['id'], 'paid', null, 'PayPal callback approved the payment.', [
+                'paypal_payment_id' => $paymentId,
+                'payer_id' => $PayerID
+            ]);
+        }
         
         header('Location: success.php?ref=' . $reference);
     } else {

@@ -1,6 +1,8 @@
 <?php
-session_start();
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+startAppSession();
 
 $error = '';
 $success = '';
@@ -15,15 +17,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        if (!$user) {
-            $error = 'No account found for that email address.';
-        } else {
+        if ($user) {
             $_SESSION['reset_email'] = $email;
             $_SESSION['reset_code'] = random_int(100000, 999999);
             $_SESSION['reset_code_generated'] = time();
-            header('Location: reset_password.php?notice=1');
-            exit();
         }
+
+        $success = 'If that email exists, a reset code has been prepared for this local demo.';
+        header('Location: reset_password.php?notice=1');
+        exit();
     }
 }
 ?>

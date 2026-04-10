@@ -2,11 +2,7 @@
     "name": "sotms/pro",
     "require": {
         "google/apiclient": "^1.1",
-        "paypal/rest-api-sdk-php": "^1.14"
-    },
-    "repositories": [{
-        "name": "pesapal",
-        "type": "vcs",
-        "url": "https://github.com/pesapal/pesapal-v3-php-sdk"
-    }]
+        "paypal/rest-api-sdk-php": "^1.14",
+        "levizwannah/pesapal-sdk-php": "v1.1.2"
+    }
 }

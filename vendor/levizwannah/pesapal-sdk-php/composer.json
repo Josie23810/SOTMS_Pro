@@ -1,0 +1,22 @@
+{
+    "name": "levizwannah/pesapal-sdk-php",
+    "description": "Pesapal V3 SDK for PHP",
+    "type": "library",
+    "require": {
+        "guzzlehttp/guzzle": "7.*"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "LeviZwannah\\PesapalSdk\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Levi Kamara Zwannah",
+            "email": "levizwannah@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true 
+}

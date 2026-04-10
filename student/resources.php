@@ -1,4 +1,4 @@
-<?php
+t<?php
 require_once '../includes/auth_check.php';
 require_once '../config/db.php';
 checkAccess(['student']);

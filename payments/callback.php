@@ -1,52 +1,56 @@
 <?php
-// Pesapal callback - VERIFY PAYMENT
 require_once '../config/db.php';
-require_once '../config/pesapal.php';
-require_once '../vendor/autoload.php';
-use Pesapal\Pesapal;
+require_once '../includes/user_helpers.php';
+require_once '../includes/services/PaymentService.php';
+require_once '../includes/services/PesapalService.php';
 
-$pesapal_txn_id = $_GET['pesapal_transaction_tracking_id'] ?? '';
-$pesapal_merchant_reference = $_GET['pesapal_merchant_reference'] ?? '';
+ensurePlatformStructures($pdo);
 
-if (empty($pesapal_txn_id) || empty($pesapal_merchant_reference)) {
-    http_response_code(400);
-    echo 'Invalid callback data';
+$trackingId = trim((string) ($_GET['OrderTrackingId'] ?? $_GET['orderTrackingId'] ?? $_GET['pesapal_transaction_tracking_id'] ?? ''));
+$reference = trim((string) ($_GET['OrderMerchantReference'] ?? $_GET['orderMerchantReference'] ?? $_GET['pesapal_merchant_reference'] ?? ''));
+
+if ($trackingId === '' && $reference === '') {
+    header('Location: fail.php?reason=missing_reference');
     exit();
 }
 
-// Fetch payment
 try {
-    $stmt = $pdo->prepare("SELECT * FROM payments WHERE reference = ?");
-    $stmt->execute([$pesapal_merchant_reference]);
-    $payment = $stmt->fetch();
-    
-    if (!$payment || $payment['status'] !== 'pending') {
-        http_response_code(400);
-        echo 'Payment not found or already processed';
+    $payment = $reference !== ''
+        ? PaymentService::findPaymentByReference($pdo, $reference)
+        : PaymentService::findPaymentByTrackingId($pdo, $trackingId);
+
+    if (!$payment) {
+        header('Location: fail.php?reason=payment_not_found');
         exit();
     }
 
-    // Real Pesapal verify
-    $pesapal_config = require '../config/pesapal.php';
-    $status = Pesapal::transactionStatus($pesapal_txn_id, $pesapal_config['consumer_key'], $pesapal_config['consumer_secret'], $pesapal_config['environment']);
-    
-    $payment_status = ($status === 'COMPLETED' || $status === 'PAID') ? 'paid' : 'failed';
-    $session_id = $payment['session_id'];
-    
-    // Update payments
-    $stmt = $pdo->prepare("UPDATE payments SET status = ?, pesapal_txn_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-    $stmt->execute([$payment_status, $pesapal_txn_id, $payment['id']]);
-    
-    // Update session
-    $stmt = $pdo->prepare("UPDATE sessions SET payment_status = ? WHERE id = ?");
-    $stmt->execute([$payment_status, $session_id]);
-    
-    echo 'OK';
-    
-} catch (PDOException | Exception $e) {
-    error_log('Callback error: ' . $e->getMessage());
-    http_response_code(500);
-    echo 'Error processing callback';
-}
-?>
+    $gatewayStatus = PesapalService::getTransactionStatus($trackingId ?: ($payment['tracking_id'] ?? $payment['pesapal_txn_id'] ?? ''));
+    $paymentStatusDescription = $gatewayStatus['payment_status_description'] ?? $gatewayStatus['status'] ?? 'PENDING';
+    $localStatus = PesapalService::mapStatusToLocal($paymentStatusDescription);
 
+    PaymentService::transitionPaymentStatus($pdo, $payment['id'], $localStatus, null, 'PesaPal callback verification processed.', [
+        'provider' => 'pesapal',
+        'tracking_id' => $trackingId ?: ($payment['tracking_id'] ?? ''),
+        'pesapal_txn_id' => $trackingId ?: ($payment['pesapal_txn_id'] ?? ''),
+        'gateway_status' => $paymentStatusDescription,
+        'merchant_reference' => $payment['reference'],
+        'callback_payload' => $_GET,
+    ]);
+
+    if ($localStatus === 'paid') {
+        header('Location: success.php?ref=' . rawurlencode($payment['reference']));
+        exit();
+    }
+
+    if ($localStatus === 'gateway_submitted') {
+        header('Location: success.php?ref=' . rawurlencode($payment['reference']) . '&state=processing');
+        exit();
+    }
+
+    header('Location: fail.php?ref=' . rawurlencode($payment['reference']) . '&reason=' . rawurlencode(strtolower((string) $paymentStatusDescription)));
+    exit();
+} catch (Throwable $e) {
+    error_log('Pesapal callback error: ' . $e->getMessage());
+    header('Location: fail.php?reason=callback_error');
+    exit();
+}

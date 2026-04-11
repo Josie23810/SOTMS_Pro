@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name']);
     $email = trim($_POST['email']);
     $role = $_POST['role'];
-    
+
     try {
         $pdo->prepare('UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?')->execute([$name, $email, $role, $user_id]);
         $_SESSION['success'] = 'User updated successfully.';
@@ -40,44 +40,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit User - Admin</title>
     <link rel="stylesheet" href="../assets/css/style.css">
-    <style>
-        body { font-family: 'Poppins', sans-serif; background: linear-gradient(rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url('../uploads/image005.jpg') center/cover fixed; }
-        .container { max-width:600px; margin:50px auto; background:white; padding:40px; border-radius:20px; box-shadow:0 25px 50px rgba(0,0,0,0.2); }
-        .form-group { margin-bottom:25px; }
-        label { display:block; font-weight:600; margin-bottom:8px; color:#374151; }
-        input, select { width:100%; padding:12px 16px; border:2px solid #e5e7eb; border-radius:12px; font-size:16px; transition: border-color 0.2s; }
-        input:focus, select:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
-        .btn { padding:14px 28px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; margin:5px; transition: all 0.2s; }
-        .btn-primary { background:linear-gradient(135deg, #3b82f6, #1d4ed8); color:white; }
-        .btn-secondary { background:#6b7280; color:white; }
-        .btn:hover { transform: translateY(-2px); box-shadow:0 10px 25px rgba(0,0,0,0.2); }
-        .error { background:#fee2e2; color:#dc2626; padding:12px; border-radius:12px; margin-bottom:20px; border:1px solid #fecaca; }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin_portal.css">
 </head>
-<body>
-    <div class="container">
-        <h1>✏️ Edit User: <?=htmlspecialchars($user['name'])?></h1>
+<body class="admin-portal">
+    <div class="admin-form-card">
+        <h1 style="margin-top:0;">Edit User</h1>
+        <p style="color:#64748b; margin-top:-6px;"><?php echo htmlspecialchars($user['name']); ?></p>
         <?php if (isset($error)): ?>
-            <div class="error"><?=htmlspecialchars($error)?></div>
+            <div class="message error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
         <form method="POST">
             <div class="form-group">
                 <label>Name</label>
-                <input type="text" name="name" value="<?=htmlspecialchars($user['name'])?>" required>
+                <input type="text" name="name" value="<?php echo htmlspecialchars($user['name']); ?>" required>
             </div>
             <div class="form-group">
                 <label>Email</label>
-                <input type="email" name="email" value="<?=htmlspecialchars($user['email'])?>" required>
+                <input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
             </div>
             <div class="form-group">
                 <label>Role</label>
                 <select name="role" required>
-                    <option value="student" <?= $user['role']=='student' ? 'selected' : '' ?>>Student</option>
-                    <option value="tutor" <?= $user['role']=='tutor' ? 'selected' : '' ?>>Tutor</option>
-                    <option value="admin" <?= $user['role']=='admin' ? 'selected' : '' ?>>Admin</option>
+                    <option value="student" <?php echo $user['role'] === 'student' ? 'selected' : ''; ?>>Student</option>
+                    <option value="tutor" <?php echo $user['role'] === 'tutor' ? 'selected' : ''; ?>>Tutor</option>
+                    <option value="admin" <?php echo $user['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
                 </select>
             </div>
-            <div>
+            <div class="stack-actions">
                 <button type="submit" class="btn btn-primary">Update User</button>
                 <a href="manage_users.php" class="btn btn-secondary">Cancel</a>
             </div>
@@ -85,4 +74,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </body>
 </html>
-

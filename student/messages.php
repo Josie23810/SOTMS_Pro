@@ -42,6 +42,38 @@ try {
 }
 
 $preselected_tutor_id = intval($_GET['to'] ?? 0);
+$reply_subject = '';
+$reply_message_seed = '';
+
+if (isset($_GET['reply_to'])) {
+    $reply_to = intval($_GET['reply_to']);
+    if ($reply_to > 0) {
+        try {
+            $stmt = $pdo->prepare('
+                SELECT m.*, u.name as sender_name
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.id = ? AND m.receiver_id = ?
+                LIMIT 1
+            ');
+            $stmt->execute([$reply_to, $_SESSION['user_id']]);
+            $original = $stmt->fetch();
+
+            if ($original) {
+                $preselected_tutor_id = intval($original['sender_id']);
+                $cleanSubject = trim($original['subject'] ?? '');
+                $reply_subject = (stripos($cleanSubject, 'Re:') === 0) ? $cleanSubject : 'Re: ' . $cleanSubject;
+                $reply_message_seed =
+                    "\n\n--- Original Message ---\n" .
+                    "From: " . ($original['sender_name'] ?? 'Tutor') . "\n" .
+                    "Sent: " . date('M j, Y g:i A', strtotime($original['created_at'])) . "\n" .
+                    $original['message'];
+            }
+        } catch (PDOException $e) {
+            error_log('Reply context fetch error (student): ' . $e->getMessage());
+        }
+    }
+}
 
 // Get sent messages
 $sent_messages = [];
@@ -259,11 +291,11 @@ try {
                         </div>
                         <div class="form-group">
                             <label for="subject">Subject</label>
-                            <input type="text" id="subject" name="subject" required placeholder="Brief subject line">
+                            <input type="text" id="subject" name="subject" required placeholder="Brief subject line" value="<?php echo htmlspecialchars($_POST['subject'] ?? $reply_subject); ?>">
                         </div>
                         <div class="form-group">
                             <label for="message">Message</label>
-                            <textarea id="message" name="message" required placeholder="Write your message here..."></textarea>
+                            <textarea id="message" name="message" required placeholder="Write your message here..."><?php echo htmlspecialchars($_POST['message'] ?? $reply_message_seed); ?></textarea>
                         </div>
                         <button type="submit" class="btn">Send Message</button>
                     </form>
@@ -279,6 +311,9 @@ try {
                                 <h4><?php echo htmlspecialchars($msg['subject']); ?></h4>
                                 <div class="meta">From: <?php echo htmlspecialchars($msg['sender_name']); ?> • <?php echo date('M j, Y g:i A', strtotime($msg['created_at'])); ?></div>
                                 <div class="content"><?php echo nl2br(htmlspecialchars(substr($msg['message'], 0, 150))); ?><?php echo strlen($msg['message']) > 150 ? '...' : ''; ?></div>
+                                <div style="margin-top:10px;">
+                                    <a class="btn" style="padding:8px 14px; font-size:14px;" href="messages.php?reply_to=<?php echo intval($msg['id']); ?>">Reply</a>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>

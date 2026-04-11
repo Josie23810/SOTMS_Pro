@@ -1,22 +1,14 @@
 <?php
 require_once '../includes/auth_check.php';
 require_once '../config/db.php';
+require_once '../includes/user_helpers.php';
+require_once '../includes/services/TutorMatchService.php';
 checkAccess(['student']);
 
-// Get available tutors + profiles
-$tutors = [];
-try {
-    $stmt = $pdo->prepare('SELECT u.id AS user_id, t.id AS tutor_id, u.name, u.email, tp.profile_image, tp.subjects_taught, tp.qualifications, tp.bio, tp.experience, tp.hourly_rate
-        FROM users u
-        LEFT JOIN tutors t ON t.user_id = u.id
-        LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
-        WHERE u.role = "tutor"
-        ORDER BY u.name');
-    $stmt->execute();
-    $tutors = $stmt->fetchAll();
-} catch (PDOException $e) {
-    error_log('Tutors fetch error: ' . $e->getMessage());
-}
+ensurePlatformStructures($pdo);
+
+list($studentProfile, $tutors) = TutorMatchService::getMatches($pdo, $_SESSION['user_id']);
+$profileReady = !empty($studentProfile['curriculum_display']) || !empty($studentProfile['study_level_display']) || !empty($studentProfile['location']) || !empty($studentProfile['subjects_display']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -26,170 +18,222 @@ try {
     <title>Find Tutors - SOTMS PRO</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)),
-                        url('../uploads/image003.jpg') center/cover no-repeat;
-            color: #1f2937;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
+        .matches-shell {
+            max-width: 1280px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.95);
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(15,23,42,0.15);
-            overflow: hidden;
         }
-        .header {
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        .matches-content {
+            padding: 24px;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 2.5rem;
-        }
-        .nav {
-            background: #f8fafc;
+        .profile-summary {
+            background: linear-gradient(135deg, #eff6ff, #ecfeff);
+            border: 1px solid #bfdbfe;
+            border-radius: 18px;
             padding: 20px;
-            border-bottom: 1px solid #e2e8f0;
-            text-align: center;
+            margin-bottom: 24px;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
         }
-        .nav a {
-            color: #2563eb;
-            text-decoration: none;
-            margin: 0 15px;
-            font-weight: 600;
-            padding: 10px 15px;
-            border-radius: 8px;
-            transition: background 0.2s;
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 14px;
         }
-        .nav a:hover {
-            background: #e0f2fe;
+        .summary-item {
+            background: rgba(255,255,255,0.9);
+            border-radius: 14px;
+            padding: 14px;
+            border: 1px solid #dbeafe;
         }
-        .content {
-            padding: 30px;
+        .summary-label {
+            font-size: 0.82rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .summary-value {
+            margin-top: 6px;
+            font-weight: 700;
+            color: #0f172a;
         }
         .tutors-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 20px;
         }
         .tutor-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            transition: transform 0.2s, box-shadow 0.2s;
+            background: linear-gradient(180deg, #ffffff, #fff7fb);
+            border: 1px solid rgba(236, 72, 153, 0.16);
+            border-radius: 18px;
+            padding: 22px;
+            box-shadow: 0 14px 32px rgba(15,23,42,0.07);
         }
-        .tutor-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        .tutor-head {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 16px;
         }
         .tutor-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            width: 72px;
+            height: 72px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            color: white;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-size: 32px;
-            margin: 0 auto 15px;
-        }
-        .tutor-name {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin: 0 0 10px;
-            color: #1f2937;
-        }
-        .tutor-email {
-            color: #6b7280;
-            margin-bottom: 15px;
-        }
-        .btn {
-            background: #2563eb;
-            color: white !important;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 15px;
+            font-size: 28px;
             font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s;
-            text-decoration: none;
-            display: inline-block;
+            overflow: hidden;
         }
-        .btn:hover {
-            background: #1d4ed8;
+        .tutor-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        .btn-secondary {
-            background: #6b7280;
+        .match-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #fdf2f8;
+            color: #be185d;
+            font-size: 0.84rem;
+            font-weight: 700;
         }
-        .btn-secondary:hover {
-            background: #4b5563;
+        .detail {
+            color: #475569;
+            margin: 7px 0;
+            line-height: 1.55;
+        }
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .tag {
+            background: #fff1f2;
+            color: #9f1239;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 0.84rem;
+            font-weight: 600;
+        }
+        .alert {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 24px;
         }
         .no-tutors {
             text-align: center;
-            padding: 50px;
+            padding: 60px 20px;
             color: #6b7280;
         }
         @media (max-width: 768px) {
+            .summary-grid,
             .tutors-grid {
                 grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Find Tutors</h1>
-            <p>Connect with qualified tutors for your learning needs</p>
+<body class="form-page">
+    <div class="form-shell matches-shell">
+        <div class="form-hero">
+            <h1>Find Matching Tutors</h1>
+            <p>Browse tutors ranked by your curriculum, level of study, subjects, and geographical area.</p>
         </div>
 
-        <div class="nav">
-            <a href="dashboard.php">← Back to Dashboard</a>
+        <div class="form-nav">
+            <a href="dashboard.php">Back to Dashboard</a>
+            <a href="profile.php">Update My Profile</a>
             <a href="../config/auth/logout.php">Logout</a>
         </div>
 
-        <div class="content">
+        <div class="form-content matches-content">
+            <?php if (!$profileReady): ?>
+                <div class="alert">
+                    Complete your profile with your curriculum, study level, subjects, and location to improve tutor matching.
+                    <a href="profile.php" class="btn" style="margin-left:12px;">Complete Profile</a>
+                </div>
+            <?php endif; ?>
+
+            <div class="profile-summary">
+                <strong>Your matching profile</strong>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-label">Curriculum</div>
+                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['curriculum_display'] ?? 'Not set'); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Level of Study</div>
+                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['study_level_display'] ?? ($studentProfile['education_level_display'] ?? 'Not set')); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Location</div>
+                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['location'] ?? 'Not set'); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Subjects</div>
+                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['subjects_display'] ?? 'Not set'); ?></div>
+                    </div>
+                </div>
+            </div>
+
             <?php if (empty($tutors)): ?>
                 <div class="no-tutors">
-                    <h3>No tutors available</h3>
-                    <p>We're working on expanding our tutor network. Please check back soon!</p>
+                    <h3>No tutors matched this profile yet</h3>
+                    <p>Try refining your curriculum, study level, subjects, or location so the system can match you with tutors who fit more closely.</p>
                 </div>
             <?php else: ?>
                 <div class="tutors-grid">
                     <?php foreach ($tutors as $tutor): ?>
                         <div class="tutor-card">
-                            <div class="tutor-avatar">
-                                <?php if (!empty($tutor['profile_image'])): ?>
-                                    <img src="../<?php echo htmlspecialchars($tutor['profile_image']); ?>" alt="<?php echo htmlspecialchars($tutor['name']); ?>" style="border-radius:50%; width:80px; height:80px; object-fit:cover;">
+                            <div class="tutor-head">
+                                <div class="tutor-avatar">
+                                    <?php if (!empty($tutor['profile_image'])): ?>
+                                        <img src="../<?php echo htmlspecialchars($tutor['profile_image']); ?>" alt="<?php echo htmlspecialchars($tutor['name']); ?>">
+                                    <?php else: ?>
+                                        <?php echo htmlspecialchars(strtoupper(substr($tutor['name'], 0, 1))); ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <h3 style="margin:0;"><?php echo htmlspecialchars($tutor['full_name'] ?: $tutor['name']); ?></h3>
+                                    <div class="detail"><?php echo htmlspecialchars($tutor['display_email']); ?></div>
+                                    <span class="match-badge">Match Score <?php echo (int) $tutor['match_score']; ?></span>
+                                </div>
+                            </div>
+
+                            <div class="detail"><strong>Subjects:</strong> <?php echo htmlspecialchars($tutor['subjects_taught_display'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Curriculum:</strong> <?php echo htmlspecialchars($tutor['curriculum_specialties_display'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Levels:</strong> <?php echo htmlspecialchars($tutor['study_levels_supported_display'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Location:</strong> <?php echo htmlspecialchars($tutor['location'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Service Areas:</strong> <?php echo htmlspecialchars($tutor['service_areas_display'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Qualifications:</strong> <?php echo htmlspecialchars($tutor['qualifications'] ?: 'Not provided'); ?></div>
+                            <div class="detail"><strong>Rate:</strong> KSh <?php echo number_format($tutor['session_rate'], 2); ?></div>
+                            <?php if (!empty($tutor['bio'])): ?>
+                                <div class="detail"><?php echo nl2br(htmlspecialchars(substr($tutor['bio'], 0, 180))); ?><?php echo strlen($tutor['bio']) > 180 ? '...' : ''; ?></div>
+                            <?php endif; ?>
+
+                            <div class="tag-list">
+                                <?php if (!empty($tutor['match_reasons'])): ?>
+                                    <?php foreach ($tutor['match_reasons'] as $reason): ?>
+                                        <span class="tag"><?php echo htmlspecialchars($reason); ?></span>
+                                    <?php endforeach; ?>
                                 <?php else: ?>
-                                    <?php echo strtoupper(substr($tutor['name'], 0, 1)); ?>
+                                    <span class="tag">General availability</span>
                                 <?php endif; ?>
                             </div>
-                            <h3 class="tutor-name"><?php echo htmlspecialchars($tutor['name']); ?></h3>
-                            <div class="tutor-email"><?php echo htmlspecialchars($tutor['email']); ?></div>
-                            <?php if (!empty($tutor['subjects_taught'])): ?>
-                                <p><strong>Subjects:</strong> <?php echo htmlspecialchars($tutor['subjects_taught']); ?></p>
-                            <?php endif; ?>
-                            <?php if (!empty($tutor['hourly_rate'])): ?>
-                                <p><strong>Rate:</strong> <?php echo htmlspecialchars($tutor['hourly_rate']); ?></p>
-                            <?php endif; ?>
-                            <?php if (!empty($tutor['bio'])): ?>
-                                <p style="font-size:0.95rem; color:#475569; margin-top:10px;"><?php echo nl2br(htmlspecialchars(substr($tutor['bio'], 0, 200))); ?><?php echo strlen($tutor['bio']) > 200 ? '...' : ''; ?></p>
-                            <?php endif; ?>
-                            <div style="margin-top: 15px;">
-                                <a href="messages.php?to=<?php echo $tutor['user_id']; ?>" class="btn">Send Message</a>
-                                <a href="book_session.php?tutor=<?php echo $tutor['tutor_id']; ?>" class="btn" style="margin-left: 10px; background: #2563eb !important; color: white !important;">Book Session</a>
+
+                            <div class="form-actions" style="margin-top:18px;">
+                                <a href="messages.php?to=<?php echo (int) $tutor['user_id']; ?>" class="btn btn-secondary">Send Message</a>
+                                <a href="book_session.php?tutor=<?php echo (int) $tutor['tutor_id']; ?>" class="btn">Book Session</a>
                             </div>
                         </div>
                     <?php endforeach; ?>

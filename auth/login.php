@@ -1,9 +1,8 @@
 ﻿<?php
-// Start the session at the very top
-session_start();
-
-// Include database connection (up one level)
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+startAppSession();
 
 $error = '';
 $success = '';
@@ -28,19 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['name'] = $user['name'];
-            $_SESSION['role'] = $user['role'];
-
-            if ($user['role'] == 'admin') {
-                header('Location: ../admin/dashboard.php');
-            } elseif ($user['role'] == 'tutor') {
-                header('Location: ../tutor/dashboard.php');
-            } else {
-                header('Location: ../student/dashboard.php');
+            try {
+                issueUserSession($pdo, $user);
+                redirectForRole($user['role']);
+            } catch (PDOException $e) {
+                error_log('Login session creation error: ' . $e->getMessage());
+                $error = 'An error occurred during login. Please try again.';
             }
-            exit();
         } else {
             $error = 'Invalid email or password.';
         }

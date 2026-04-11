@@ -1,45 +1,10 @@
 <?php
-session_start();
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/user_helpers.php';
+require_once __DIR__ . '/../../includes/auth_helpers.php';
 
-// Restore session from database manually (can't use auth_check yet)
-function restoreSessionFromDatabaseLocal($pdo) {
-    if (!isset($_COOKIE['session_token'])) {
-        return false;
-    }
-    
-    $session_token = $_COOKIE['session_token'];
-    
-    try {
-        $stmt = $pdo->prepare("SELECT us.user_id, us.role, u.name, u.email 
-            FROM user_sessions us 
-            JOIN users u ON us.user_id = u.id 
-            WHERE us.session_token = ? 
-            AND us.expires_at > NOW()");
-        $stmt->execute([$session_token]);
-        $session = $stmt->fetch();
-        
-        if ($session) {
-            $_SESSION['user_id'] = $session['user_id'];
-            $_SESSION['name'] = $session['name'];
-            $_SESSION['role'] = $session['role'];
-            $_SESSION['session_token'] = $session_token;
-            
-            $stmt = $pdo->prepare("UPDATE user_sessions SET last_activity = NOW() WHERE session_token = ?");
-            $stmt->execute([$session_token]);
-            
-            return true;
-        }
-    } catch (PDOException $e) {
-        error_log('Session restore error: ' . $e->getMessage());
-    }
-    
-    return false;
-}
-
-// Restore session from database
-restoreSessionFromDatabaseLocal($pdo);
+startAppSession();
+restoreUserSession($pdo);
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -68,7 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['switch_to_role'])) {
     // Find session with this role
     foreach ($active_sessions as $s) {
         if ($s['role'] === $role) {
-            setcookie('session_token', $s['session_token'], time() + (30 * 24 * 60 * 60), '/');
+            $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+            setcookie('session_token', $s['session_token'], [
+                'expires' => time() + (30 * 24 * 60 * 60),
+                'path' => '/',
+                'secure' => $isSecure,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
             $_SESSION['session_token'] = $s['session_token'];
             
             // Redirect to appropriate dashboard

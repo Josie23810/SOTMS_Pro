@@ -5,6 +5,7 @@ return [
     'mode' => 'sandbox',
     'base_url' => 'https://api-m.sandbox.paypal.com',
     'callback_url' => 'https://kiesha-prerational-duke.ngrok-free.dev/payments/paypal_callback.php'
+    'enabled' => false,
 ];
 ?>
 

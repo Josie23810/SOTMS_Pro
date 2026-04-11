@@ -1,6 +1,7 @@
 <?php
 // Initiate Google OAuth flow using the configured Google client.
-session_start();
+require_once __DIR__ . '/../includes/auth_helpers.php';
+startAppSession();
 require_once __DIR__ . '/../config/google_config.php';
 
 $redirectTarget = 'login.php';

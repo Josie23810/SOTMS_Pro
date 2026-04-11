@@ -1,0 +1,7 @@
+table_name	count
+students	3
+tutors	3
+student_profiles	3
+tutor_profiles	2
+tutor_availability_slots	0
+study_levels	27

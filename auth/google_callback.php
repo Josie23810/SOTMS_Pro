@@ -1,9 +1,10 @@
 <?php
 // SOTMS_PRO/auth/google_callback.php
-session_start();
-
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/google_config.php';
+require_once __DIR__ . '/../includes/auth_helpers.php';
+
+startAppSession();
 
 if (isset($_GET['mock']) || empty($googleAuthAvailable)) {
     $source = $_SESSION['google_source'] ?? 'login';
@@ -40,13 +41,14 @@ if (isset($_GET['code']) && !empty($googleAuthAvailable)) {
             exit();
         }
 
-        session_regenerate_id(true);
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['name'] = $user['name'];
-        $_SESSION['role'] = $user['role'];
-
-        header('Location: ../' . $user['role'] . '/dashboard.php');
-        exit();
+        try {
+            issueUserSession($pdo, $user);
+            redirectForRole($user['role']);
+        } catch (PDOException $e) {
+            error_log('Google callback session creation error: ' . $e->getMessage());
+            header('Location: login.php?google_error=1');
+            exit();
+        }
     }
 
     echo 'Google Authentication Failed.';

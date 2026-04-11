@@ -1,6 +1,20 @@
 <?php
 
 class ProfileTaxonomyService {
+    private static $educationLevelLabels = [
+        'primary' => 'Primary School',
+        'junior_secondary' => 'Junior Secondary',
+        'high_school' => 'Senior Secondary / High School',
+        'certificate' => 'Certificate',
+        'diploma' => 'Diploma',
+        'bachelors' => "Bachelor's Degree",
+        'postgraduate_diploma' => 'Postgraduate Diploma',
+        'masters' => "Master's Degree",
+        'phd' => 'PhD / Doctorate',
+        'professional' => 'Professional Qualification',
+        'other' => 'Other',
+    ];
+
     public static function getCatalogOptions(PDO $pdo) {
         ensurePlatformStructures($pdo);
 
@@ -198,10 +212,20 @@ class ProfileTaxonomyService {
 
         $parts = [];
         foreach ($slots as $slot) {
-            $part = trim(($slot['day_of_week'] ?? '') . ' ' . ($slot['start_time'] ?? '') . '-' . ($slot['end_time'] ?? ''));
-            if (!empty($slot['delivery_mode'])) {
-                $part .= ' (' . str_replace('_', ' ', $slot['delivery_mode']) . ')';
+            $start = self::formatTimeLabel($slot['start_time'] ?? '');
+            $end = self::formatTimeLabel($slot['end_time'] ?? '');
+            $part = trim(($slot['day_of_week'] ?? '') . ' ' . $start . '-' . $end);
+
+            $deliveryMode = trim((string) ($slot['delivery_mode'] ?? ''));
+            if ($deliveryMode !== '' && $deliveryMode !== 'both') {
+                $part .= ' (' . self::labelDeliveryMode($deliveryMode) . ')';
             }
+
+            $locationNote = trim((string) ($slot['location_note'] ?? ''));
+            if ($locationNote !== '') {
+                $part .= ' - ' . $locationNote;
+            }
+
             if ($part !== '') {
                 $parts[] = $part;
             }
@@ -212,9 +236,10 @@ class ProfileTaxonomyService {
 
     private static function applyDisplayFields(array $profile, $type) {
         if ($type === 'student') {
+            $profile['education_level_display'] = self::labelEducationLevel($profile['education_level'] ?? '');
             $profile['subjects_display'] = !empty($profile['subject_names']) ? implode(', ', $profile['subject_names']) : (string) ($profile['subjects_interested'] ?? '');
             $profile['curriculum_display'] = !empty($profile['curriculum_names']) ? implode(', ', $profile['curriculum_names']) : (string) ($profile['curriculum'] ?? '');
-            $profile['study_level_display'] = !empty($profile['study_level_names']) ? implode(', ', $profile['study_level_names']) : (string) ($profile['level_of_study'] ?? ($profile['education_level'] ?? ''));
+            $profile['study_level_display'] = !empty($profile['study_level_names']) ? implode(', ', $profile['study_level_names']) : (string) ($profile['level_of_study'] ?? ($profile['education_level_display'] ?? ''));
         } else {
             $profile['subjects_taught_display'] = !empty($profile['subject_names']) ? implode(', ', $profile['subject_names']) : (string) ($profile['subjects_taught'] ?? '');
             $profile['curriculum_specialties_display'] = !empty($profile['curriculum_names']) ? implode(', ', $profile['curriculum_names']) : (string) ($profile['curriculum_specialties'] ?? '');
@@ -224,6 +249,28 @@ class ProfileTaxonomyService {
         }
 
         return $profile;
+    }
+
+    public static function labelEducationLevel($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $legacyMap = [
+            'college' => "Bachelor's Degree",
+            'university' => "Bachelor's Degree",
+            'tertiary' => "Bachelor's Degree",
+            'secondary' => 'Senior Secondary / High School',
+            'junior secondary' => 'Junior Secondary',
+        ];
+
+        $legacyKey = strtolower($value);
+        if (isset($legacyMap[$legacyKey])) {
+            return $legacyMap[$legacyKey];
+        }
+
+        return self::$educationLevelLabels[$value] ?? ucwords(str_replace('_', ' ', $value));
     }
 
     private static function fetchLookupNames(PDO $pdo, $table) {
@@ -391,6 +438,31 @@ class ProfileTaxonomyService {
         $endTimestamp = strtotime('1970-01-01 ' . $end);
 
         return $startTimestamp !== false && $endTimestamp !== false && $startTimestamp < $endTimestamp;
+    }
+
+    private static function formatTimeLabel($time) {
+        $time = trim((string) $time);
+        if ($time === '') {
+            return '';
+        }
+
+        $timestamp = strtotime('1970-01-01 ' . $time);
+        if ($timestamp === false) {
+            return $time;
+        }
+
+        return date('g:i A', $timestamp);
+    }
+
+    private static function labelDeliveryMode($value) {
+        $map = [
+            'online' => 'Online',
+            'in_person' => 'In-person',
+            'both' => 'Online or in-person',
+        ];
+
+        $key = strtolower(trim((string) $value));
+        return $map[$key] ?? ucwords(str_replace('_', ' ', $key));
     }
 
     private static function slugify($value) {

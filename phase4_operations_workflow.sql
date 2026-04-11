@@ -6,9 +6,9 @@ CREATE TABLE IF NOT EXISTS payment_events (
     event_data JSON NULL,
     created_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_payment_event_payment (payment_id, created_at)
+    CONSTRAINT fk_payment_events_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payment_events_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_payment_events_lookup (payment_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tutor_verification_reviews (
@@ -18,10 +18,16 @@ CREATE TABLE IF NOT EXISTS tutor_verification_reviews (
     decision VARCHAR(40) NOT NULL,
     review_notes TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (tutor_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_tutor_review_tutor (tutor_user_id, created_at)
+    CONSTRAINT fk_tutor_verification_reviews_tutor FOREIGN KEY (tutor_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tutor_verification_reviews_admin FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_tutor_verification_reviews_lookup (tutor_user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE payments
+    ADD COLUMN IF NOT EXISTS provider VARCHAR(30) DEFAULT 'manual',
+    ADD COLUMN IF NOT EXISTS tracking_id VARCHAR(100) NULL,
+    ADD COLUMN IF NOT EXISTS pesapal_txn_id VARCHAR(100) NULL,
+    ADD COLUMN IF NOT EXISTS paypal_payment_id VARCHAR(100) NULL;
 
 INSERT INTO schema_migrations (migration_key)
 VALUES ('003_phase4_operations_workflow')

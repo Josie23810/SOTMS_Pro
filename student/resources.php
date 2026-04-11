@@ -8,8 +8,8 @@ ensurePlatformStructures($pdo);
 
 $studentId = getStudentId($pdo, $_SESSION['user_id']);
 $studentProfile = fetchStudentProfile($pdo, $_SESSION['user_id']);
-$studentCurriculum = trim((string) ($studentProfile['curriculum'] ?? ''));
-$studentLevel = trim((string) ($studentProfile['level_of_study'] ?? ($studentProfile['education_level'] ?? '')));
+$studentCurriculum = trim((string) ($studentProfile['curriculum_display'] ?? $studentProfile['curriculum'] ?? ''));
+$studentLevel = trim((string) ($studentProfile['study_level_display'] ?? $studentProfile['level_of_study'] ?? ($studentProfile['education_level_display'] ?? $studentProfile['education_level'] ?? '')));
 
 $tutor_materials = [];
 try {
@@ -36,126 +36,170 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resources - SOTMS PRO</title>
+    <title>Learning Resources - SOTMS PRO</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)),
-                        url('../uploads/image003.jpg') center/cover no-repeat;
-            color: #1f2937;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1240px;
+        .resources-shell {
+            max-width: 1280px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.96);
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(15,23,42,0.15);
-            overflow: hidden;
         }
-        .header {
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        .resources-content {
+            padding: 24px;
         }
-        .header h1 { margin: 0; font-size: 2.5rem; }
-        .nav {
-            background: #f8fafc;
-            padding: 20px;
-            border-bottom: 1px solid #e2e8f0;
-            text-align: center;
-        }
-        .nav a {
-            color: #2563eb;
-            text-decoration: none;
-            margin: 0 15px;
-            font-weight: 600;
-            padding: 10px 15px;
-            border-radius: 8px;
-        }
-        .nav a:hover { background: #e0f2fe; }
-        .content { padding: 30px; }
-        .summary {
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            border-radius: 14px;
+        .summary-banner {
+            background: linear-gradient(135deg, #eff6ff, #f5f3ff);
+            border: 1px solid #c4b5fd;
+            border-radius: 18px;
             padding: 18px;
             margin-bottom: 24px;
         }
-        .materials-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 20px;
+        .summary-title {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #312e81;
         }
-        .material-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 22px;
-            box-shadow: 0 8px 20px rgba(15,23,42,0.05);
+        .summary-copy {
+            margin: 0;
+            color: #475569;
         }
-        .material-header { display: flex; justify-content: space-between; gap: 14px; }
-        .material-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
-        .material-description { color: #6b7280; margin: 12px 0; line-height: 1.6; }
-        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .tag { background: #dbeafe; color: #1d4ed8; padding: 6px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-        .download-btn {
-            background: #10b981;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-weight: 700;
-            text-decoration: none;
+        .profile-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .profile-pill {
             display: inline-flex;
-            margin-top: 16px;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 7px 11px;
+            background: #fff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            font-size: 0.84rem;
+            font-weight: 700;
         }
-        .download-btn:hover { background: #059669; }
-        .empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
-        @media (max-width: 768px) {
-            .materials-grid { grid-template-columns: 1fr; }
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+        }
+        .resource-card {
+            background: linear-gradient(180deg, #ffffff, #fff7fb);
+            border: 1px solid rgba(236, 72, 153, 0.14);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+        }
+        .resource-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            align-items: flex-start;
+        }
+        .resource-title {
+            margin: 0;
+            font-size: 1.16rem;
+            font-weight: 800;
+            color: #111827;
+        }
+        .resource-meta {
+            margin-top: 8px;
+            color: #475569;
+            line-height: 1.7;
+        }
+        .resource-copy {
+            margin: 14px 0 0;
+            color: #475569;
+            line-height: 1.7;
+        }
+        .tag-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .tag {
+            background: #fdf2f8;
+            color: #be185d;
+            padding: 7px 11px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 18px;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            color: #fff;
+            padding: 11px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+        }
+        .empty-card {
+            text-align: center;
+            padding: 56px 20px;
+            background: linear-gradient(180deg, #ffffff, #fff7fb);
+            border: 1px solid rgba(236, 72, 153, 0.14);
+            border-radius: 20px;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+        }
+        .empty-card h3 {
+            margin: 0 0 10px;
+            font-size: 1.5rem;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Learning Materials</h1>
-            <p>Access tutor-uploaded resources connected to your sessions and aligned with your study profile.</p>
+<body class="form-page">
+    <div class="form-shell resources-shell">
+        <div class="form-hero">
+            <h1>Learning Resources</h1>
+            <p>Open tutor-shared files tied to your sessions and aligned to your current learning profile.</p>
         </div>
 
-        <div class="nav">
+        <div class="form-nav">
             <a href="dashboard.php">Back to Dashboard</a>
             <a href="schedule.php">My Sessions</a>
             <a href="../config/auth/logout.php">Logout</a>
         </div>
 
-        <div class="content">
-            <div class="summary">
-                <strong>Your current learning profile:</strong>
-                Curriculum: <?php echo htmlspecialchars($studentCurriculum ?: 'Not set'); ?> |
-                Study level: <?php echo htmlspecialchars($studentLevel ?: 'Not set'); ?>
+        <div class="form-content resources-content">
+            <div class="summary-banner">
+                <h2 class="summary-title">Your current learning profile</h2>
+                <p class="summary-copy">These details help tutors upload materials that fit your current stage and curriculum.</p>
+                <div class="profile-pills">
+                    <span class="profile-pill">Curriculum: <?php echo htmlspecialchars($studentCurriculum ?: 'Not set'); ?></span>
+                    <span class="profile-pill">Study level: <?php echo htmlspecialchars($studentLevel ?: 'Not set'); ?></span>
+                </div>
             </div>
 
             <?php if (empty($tutor_materials)): ?>
-                <div class="empty-state">
+                <div class="empty-card">
                     <h3>No tutor materials yet</h3>
-                    <p>Resources appear here once a tutor you have booked with uploads learning materials.</p>
+                    <p>Resources will appear here when a tutor you have booked with uploads materials for your sessions.</p>
                 </div>
             <?php else: ?>
-                <div class="materials-grid">
+                <div class="resource-grid">
                     <?php foreach ($tutor_materials as $material): ?>
-                        <div class="material-card">
-                            <div class="material-header">
+                        <article class="resource-card">
+                            <div class="resource-head">
                                 <div>
-                                    <h3 class="material-title"><?php echo htmlspecialchars($material['title']); ?></h3>
-                                    <div style="color:#475569; margin-top:6px;">By <?php echo htmlspecialchars($material['tutor_name']); ?></div>
+                                    <h3 class="resource-title"><?php echo htmlspecialchars($material['title']); ?></h3>
+                                    <div class="resource-meta">
+                                        By <?php echo htmlspecialchars($material['tutor_name']); ?><br>
+                                        Added on <?php echo date('M j, Y', strtotime($material['uploaded_at'])); ?>
+                                    </div>
                                 </div>
-                                <div style="color:#94a3b8; font-size:0.9rem;"><?php echo date('M j, Y', strtotime($material['uploaded_at'])); ?></div>
                             </div>
-                            <p class="material-description"><?php echo htmlspecialchars($material['description'] ?: 'No description provided.'); ?></p>
+
+                            <p class="resource-copy"><?php echo htmlspecialchars($material['description'] ?: 'No description provided.'); ?></p>
+
                             <div class="tag-row">
                                 <?php foreach ([$material['subject'], $material['curriculum'], $material['study_level']] as $tagValue): ?>
                                     <?php if (!empty($tagValue)): ?>
@@ -163,8 +207,9 @@ try {
                                     <?php endif; ?>
                                 <?php endforeach; ?>
                             </div>
+
                             <a href="../<?php echo htmlspecialchars($material['file_path']); ?>" class="download-btn" target="_blank">Download Material</a>
-                        </div>
+                        </article>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>

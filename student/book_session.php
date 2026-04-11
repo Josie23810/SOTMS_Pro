@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../config/db.php';
 require_once '../includes/user_helpers.php';
 require_once '../includes/services/SessionService.php';
+require_once '../includes/services/TutorMatchService.php';
 checkAccess(['student']);
 
 ensurePlatformStructures($pdo);
@@ -13,7 +14,12 @@ $studentId = getStudentId($pdo, $_SESSION['user_id']);
 $studentProfile = fetchStudentProfile($pdo, $_SESSION['user_id']);
 $preselected_tutor_id = intval($_GET['tutor'] ?? 0);
 
-$tutors = SessionService::fetchTutorDirectory($pdo);
+$matchedTutorRows = [];
+list(, $matchedTutorRows) = TutorMatchService::getMatches($pdo, $_SESSION['user_id']);
+$tutors = !empty($matchedTutorRows) ? array_map(function ($tutor) {
+    $tutor['id'] = $tutor['tutor_id'];
+    return $tutor;
+}, $matchedTutorRows) : SessionService::fetchTutorDirectory($pdo);
 $tutorsById = SessionService::mapTutorsById($tutors);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

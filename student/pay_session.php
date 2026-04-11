@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../config/db.php';
 require_once '../includes/user_helpers.php';
 require_once '../includes/services/PaymentService.php';
+require_once '../includes/services/PesapalService.php';
 checkAccess(['student']);
 
 ensurePlatformStructures($pdo);
@@ -18,18 +19,23 @@ if (!$session_id || !$studentId) {
 }
 
 $session = PaymentService::findStudentSessionForPayment($pdo, $session_id, $studentId);
+$pesapalReadiness = PesapalService::getReadiness();
 
 if (!$session) {
     header('Location: schedule.php');
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['provider'])) {
-    $provider = trim($_POST['provider']);
-    $result = PaymentService::submitSessionPayment($pdo, $session, $studentId, $_SESSION['user_id'], $provider);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $result = PaymentService::submitSessionPayment($pdo, $session, $studentId, $_SESSION['user_id'], 'pesapal');
     $session = $result['session'];
     $message = $result['message'];
     $messageType = $result['type'];
+
+    if (!empty($result['redirect_url'])) {
+        header('Location: ' . $result['redirect_url']);
+        exit();
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -50,18 +56,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['provider'])) {
         .message { padding:16px; border-radius:12px; margin-bottom:20px; }
         .success { background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; }
         .error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-        select { width:100%; padding:12px; border-radius:10px; border:1px solid #d1d5db; margin-top:8px; margin-bottom:16px; }
+        .muted { color:#64748b; }
+        .warning { background:#fff7ed; color:#9a3412; border:1px solid #fdba74; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Session Payment</h1>
-            <p>Record payment for your booked tutoring session.</p>
+            <p>Pay securely with PesaPal.</p>
         </div>
         <div class="content">
             <?php if ($message): ?>
                 <div class="message <?php echo htmlspecialchars($messageType); ?>"><?php echo htmlspecialchars($message); ?></div>
+            <?php endif; ?>
+
+            <?php if (!$pesapalReadiness['ready']): ?>
+                <div class="message warning">
+                    <strong>PesaPal setup is incomplete.</strong><br>
+                    <?php echo htmlspecialchars(implode(' ', $pesapalReadiness['issues'])); ?>
+                </div>
             <?php endif; ?>
 
             <div class="card">
@@ -77,21 +91,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['provider'])) {
             <?php elseif ($session['payment_status'] === 'processing'): ?>
                 <div class="card">
                     <strong>Verification in progress</strong>
-                    <p style="color:#475569; margin-bottom:0;">Your payment submission is awaiting callback or admin verification. You can return to your schedule while this is processed.</p>
+                    <p class="muted" style="margin-bottom:0;">Your PesaPal payment is awaiting confirmation. You can return to your schedule while it updates.</p>
                 </div>
                 <a href="schedule.php" class="btn">Back to Schedule</a>
             <?php else: ?>
                 <form method="POST">
                     <input type="hidden" name="session_id" value="<?php echo (int) $session_id; ?>">
-                    <label for="provider"><strong>Choose payment channel</strong></label>
-                    <select name="provider" id="provider" required>
-                        <option value="">Select a payment method</option>
-                        <?php foreach (PaymentService::supportedProviders() as $providerValue => $providerLabel): ?>
-                            <option value="<?php echo htmlspecialchars($providerValue); ?>"><?php echo htmlspecialchars($providerLabel); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <p style="color:#64748b; margin-bottom:18px;">This local build submits the payment into the platform workflow, where callbacks or an admin reviewer can verify, fail, or refund it without changing the student flow.</p>
-                    <button type="submit" class="btn">Submit Payment</button>
+                    <div class="card">
+                        <strong>PesaPal Checkout</strong>
+                        <p class="muted" style="margin-bottom:0;">You will be redirected to PesaPal to complete the payment, then returned to SOTMS Pro.</p>
+                    </div>
+                    <?php if (!$pesapalReadiness['ready']): ?>
+                        <a href="schedule.php" class="btn" style="background:#475569;">Back to Schedule</a>
+                    <?php else: ?>
+                        <button type="submit" class="btn">Continue to PesaPal</button>
+                    <?php endif; ?>
                     <a href="schedule.php" class="btn" style="background:#475569; margin-left:8px;">Cancel</a>
                 </form>
             <?php endif; ?>

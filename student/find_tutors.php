@@ -18,52 +18,20 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
     <title>Find Tutors - SOTMS PRO</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)),
-                        url('../uploads/image003.jpg') center/cover no-repeat;
-            color: #1f2937;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
+        .matches-shell {
             max-width: 1280px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.96);
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(15,23,42,0.15);
-            overflow: hidden;
         }
-        .header {
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        .matches-content {
+            padding: 24px;
         }
-        .header h1 { margin: 0; font-size: 2.5rem; }
-        .header p { margin: 10px 0 0; opacity: 0.92; }
-        .nav {
-            background: #f8fafc;
-            padding: 20px;
-            border-bottom: 1px solid #e2e8f0;
-            text-align: center;
-        }
-        .nav a {
-            color: #2563eb;
-            text-decoration: none;
-            margin: 0 15px;
-            font-weight: 600;
-            padding: 10px 15px;
-            border-radius: 8px;
-        }
-        .nav a:hover { background: #e0f2fe; }
-        .content { padding: 30px; }
         .profile-summary {
-            background: #eff6ff;
+            background: linear-gradient(135deg, #eff6ff, #ecfeff);
             border: 1px solid #bfdbfe;
-            border-radius: 14px;
+            border-radius: 18px;
             padding: 20px;
             margin-bottom: 24px;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
         }
         .summary-grid {
             display: grid;
@@ -72,8 +40,8 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
             margin-top: 14px;
         }
         .summary-item {
-            background: white;
-            border-radius: 12px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 14px;
             padding: 14px;
             border: 1px solid #dbeafe;
         }
@@ -94,11 +62,11 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
             gap: 20px;
         }
         .tutor-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
+            background: linear-gradient(180deg, #ffffff, #fff7fb);
+            border: 1px solid rgba(236, 72, 153, 0.16);
+            border-radius: 18px;
             padding: 22px;
-            box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+            box-shadow: 0 14px 32px rgba(15,23,42,0.07);
         }
         .tutor-head {
             display: flex;
@@ -109,8 +77,8 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
         .tutor-avatar {
             width: 72px;
             height: 72px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border-radius: 22px;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
             color: white;
             display: flex;
             align-items: center;
@@ -130,8 +98,8 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
             gap: 8px;
             padding: 7px 12px;
             border-radius: 999px;
-            background: #dbeafe;
-            color: #1d4ed8;
+            background: #fdf2f8;
+            color: #be185d;
             font-size: 0.84rem;
             font-weight: 700;
         }
@@ -147,33 +115,18 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
             margin-top: 12px;
         }
         .tag {
-            background: #f1f5f9;
-            color: #334155;
+            background: #fff1f2;
+            color: #9f1239;
             border-radius: 999px;
             padding: 7px 12px;
             font-size: 0.84rem;
             font-weight: 600;
         }
-        .btn {
-            background: #2563eb;
-            color: white !important;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 700;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn:hover { background: #1d4ed8; }
-        .btn-secondary { background: #0f766e; }
-        .btn-secondary:hover { background: #115e59; }
         .alert {
             background: #fef3c7;
             color: #92400e;
             border: 1px solid #fde68a;
-            border-radius: 14px;
+            border-radius: 16px;
             padding: 18px;
             margin-bottom: 24px;
         }
@@ -190,20 +143,20 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
+<body class="form-page">
+    <div class="form-shell matches-shell">
+        <div class="form-hero">
             <h1>Find Matching Tutors</h1>
             <p>Browse tutors ranked by your curriculum, level of study, subjects, and geographical area.</p>
         </div>
 
-        <div class="nav">
+        <div class="form-nav">
             <a href="dashboard.php">Back to Dashboard</a>
             <a href="profile.php">Update My Profile</a>
             <a href="../config/auth/logout.php">Logout</a>
         </div>
 
-        <div class="content">
+        <div class="form-content matches-content">
             <?php if (!$profileReady): ?>
                 <div class="alert">
                     Complete your profile with your curriculum, study level, subjects, and location to improve tutor matching.
@@ -220,7 +173,7 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
                     </div>
                     <div class="summary-item">
                         <div class="summary-label">Level of Study</div>
-                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['study_level_display'] ?? ($studentProfile['education_level'] ?? 'Not set')); ?></div>
+                        <div class="summary-value"><?php echo htmlspecialchars($studentProfile['study_level_display'] ?? ($studentProfile['education_level_display'] ?? 'Not set')); ?></div>
                     </div>
                     <div class="summary-item">
                         <div class="summary-label">Location</div>
@@ -235,8 +188,8 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
 
             <?php if (empty($tutors)): ?>
                 <div class="no-tutors">
-                    <h3>No tutors available</h3>
-                    <p>We could not find tutor profiles yet. Tutors will appear here once they complete their profiles.</p>
+                    <h3>No tutors matched this profile yet</h3>
+                    <p>Try refining your curriculum, study level, subjects, or location so the system can match you with tutors who fit more closely.</p>
                 </div>
             <?php else: ?>
                 <div class="tutors-grid">
@@ -278,7 +231,7 @@ $profileReady = !empty($studentProfile['curriculum_display']) || !empty($student
                                 <?php endif; ?>
                             </div>
 
-                            <div style="margin-top: 18px; display:flex; gap:10px; flex-wrap:wrap;">
+                            <div class="form-actions" style="margin-top:18px;">
                                 <a href="messages.php?to=<?php echo (int) $tutor['user_id']; ?>" class="btn btn-secondary">Send Message</a>
                                 <a href="book_session.php?tutor=<?php echo (int) $tutor['tutor_id']; ?>" class="btn">Book Session</a>
                             </div>

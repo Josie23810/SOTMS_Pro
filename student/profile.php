@@ -36,20 +36,106 @@ $studyLevelSuggestions = [
     'CPA', 'ACCA', 'Professional Certification'
 ];
 
+$studyLevelSuggestionsByEducation = [
+    'primary' => ['Grade 4', 'Grade 5', 'Grade 6'],
+    'junior_secondary' => ['Grade 7', 'Grade 8', 'Grade 9'],
+    'high_school' => ['Form 1', 'Form 2', 'Form 3', 'Form 4'],
+    'certificate' => ['Certificate Year 1', 'Certificate Year 2'],
+    'diploma' => ['Diploma Year 1', 'Diploma Year 2', 'Diploma Final Year'],
+    'bachelors' => ["Bachelor's Year 1", "Bachelor's Year 2", "Bachelor's Year 3", "Bachelor's Year 4"],
+    'postgraduate_diploma' => ['Postgraduate Diploma'],
+    'masters' => ["Master's Coursework", "Master's Research"],
+    'phd' => ['PhD Year 1', 'PhD Candidate'],
+    'professional' => ['CPA', 'ACCA', 'Professional Certification'],
+    'other' => $studyLevelSuggestions
+];
+
+$curriculumSuggestionsByEducation = [
+    'primary' => ['CBC', '8-4-4'],
+    'junior_secondary' => ['CBC', '8-4-4'],
+    'high_school' => ['KCSE', 'IGCSE', 'IB', 'A-Level', '8-4-4'],
+    'certificate' => ['TVET', 'Professional Programme'],
+    'diploma' => ['TVET', 'Professional Programme'],
+    'bachelors' => ['University Degree', 'Professional Programme'],
+    'postgraduate_diploma' => ['University Degree', 'Professional Programme'],
+    'masters' => ['University Degree'],
+    'phd' => ['University Degree'],
+    'professional' => ['Professional Programme'],
+    'other' => array_values(array_unique(array_merge($catalogOptions['curricula'], ['TVET', 'University Degree', 'Professional Programme'])))
+];
+
 $message = '';
 $messageType = '';
+
+function normalizeStudentEducationSelection($educationLevel, $levelOfStudy = '', $curriculum = '') {
+    $educationLevel = strtolower(trim((string) $educationLevel));
+    $levelOfStudy = strtolower(trim((string) $levelOfStudy));
+    $curriculum = strtolower(trim((string) $curriculum));
+
+    if ($educationLevel === '') {
+        return 'high_school';
+    }
+
+    if (isset($GLOBALS['educationLevelOptions'][$educationLevel])) {
+        return $educationLevel;
+    }
+
+    if (in_array($educationLevel, ['college', 'tertiary', 'university'], true)) {
+        if (strpos($levelOfStudy, 'certificate') !== false) {
+            return 'certificate';
+        }
+        if (strpos($levelOfStudy, 'diploma') !== false || strpos($curriculum, 'tvet') !== false) {
+            return 'diploma';
+        }
+        if (strpos($levelOfStudy, 'master') !== false) {
+            return 'masters';
+        }
+        if (strpos($levelOfStudy, 'phd') !== false || strpos($levelOfStudy, 'doctorate') !== false) {
+            return 'phd';
+        }
+        return 'bachelors';
+    }
+
+    if (in_array($educationLevel, ['secondary', 'high school', 'senior secondary'], true)) {
+        return 'high_school';
+    }
+
+    if (in_array($educationLevel, ['junior secondary', 'junior'], true)) {
+        return 'junior_secondary';
+    }
+
+    return 'other';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $full_name = trim($_POST['full_name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
     $education_level = trim($_POST['education_level'] ?? 'high_school');
     $level_of_study = trim($_POST['level_of_study'] ?? '');
+    if ($level_of_study === '__custom__') {
+        $level_of_study = trim($_POST['level_of_study_custom'] ?? '');
+    }
     $current_institution = trim($_POST['current_institution'] ?? '');
     $curriculum = trim($_POST['curriculum'] ?? '');
+    if ($curriculum === '__custom__') {
+        $curriculum = trim($_POST['curriculum_custom'] ?? '');
+    }
     $location = trim($_POST['location'] ?? '');
+    if ($location === '__custom__') {
+        $location = trim($_POST['location_custom'] ?? '');
+    }
     $guardian_name = trim($_POST['guardian_name'] ?? '');
     $guardian_phone = trim($_POST['guardian_phone'] ?? '');
-    $subjects_interested = trim($_POST['subjects_interested'] ?? '');
+    $subject_select = isset($_POST['subjects_interested_select']) && is_array($_POST['subjects_interested_select'])
+        ? array_values(array_filter(array_map('trim', $_POST['subjects_interested_select']), static function ($value) {
+            return $value !== '';
+        }))
+        : [];
+    $custom_subjects_interested = trim($_POST['custom_subjects_interested'] ?? '');
+    if ($custom_subjects_interested !== '') {
+        $subject_select[] = $custom_subjects_interested;
+    }
+    $subjects_interested = implode(', ', array_values(array_unique($subject_select)));
     $bio = trim($_POST['bio'] ?? '');
     $goals = trim($_POST['goals'] ?? '');
     $preferred_radius_km = max(5, min(500, intval($_POST['preferred_radius_km'] ?? 50)));
@@ -140,6 +226,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
+$selectedEducation = normalizeStudentEducationSelection(
+    $profile['education_level'] ?? 'high_school',
+    $profile['level_of_study'] ?? '',
+    $profile['curriculum'] ?? ''
+);
+$initialStudyLevels = $studyLevelSuggestionsByEducation[$selectedEducation] ?? $studyLevelSuggestionsByEducation['other'];
+$initialCurricula = $curriculumSuggestionsByEducation[$selectedEducation] ?? $curriculumSuggestionsByEducation['other'];
+$currentStudyLevel = $profile['level_of_study'] ?? '';
+$currentCurriculum = $profile['curriculum'] ?? '';
+$studyLevelIsPreset = in_array($currentStudyLevel, $initialStudyLevels, true);
+$curriculumIsPreset = in_array($currentCurriculum, $initialCurricula, true);
+$locationOptions = $catalogOptions['service_areas'];
+$currentLocation = $profile['location'] ?? '';
+$locationIsPreset = in_array($currentLocation, $locationOptions, true);
+$savedSubjectValues = !empty($profile['subject_names'])
+    ? $profile['subject_names']
+    : normalizeCsvArray($profile['subjects_display'] ?? ($profile['subjects_interested'] ?? ''));
+$subjectOptionValues = $catalogOptions['subjects'];
+$selectedSubjectOptions = array_values(array_intersect($savedSubjectValues, $subjectOptionValues));
+$customSubjectValues = array_values(array_diff($savedSubjectValues, $subjectOptionValues));
+$customSubjectsValue = implode(', ', $customSubjectValues);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,46 +256,13 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
     <title>Student / Parent Profile - SOTMS PRO</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)),
-                        url('../uploads/image003.jpg') center/cover no-repeat;
-            color: #1f2937;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1100px;
+        .profile-shell {
+            max-width: 1140px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.96);
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(15,23,42,0.15);
-            overflow: hidden;
         }
-        .header {
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        .profile-content {
+            padding: 24px;
         }
-        .header h1 { margin: 0; font-size: 2.4rem; }
-        .header p { margin: 10px 0 0; opacity: 0.9; }
-        .nav {
-            background: #f8fafc;
-            padding: 20px;
-            border-bottom: 1px solid #e2e8f0;
-            text-align: center;
-        }
-        .nav a {
-            color: #2563eb;
-            text-decoration: none;
-            margin: 0 15px;
-            font-weight: 600;
-            padding: 10px 15px;
-            border-radius: 8px;
-        }
-        .nav a:hover { background: #e0f2fe; }
-        .content { padding: 30px; }
         .profile-grid {
             display: grid;
             grid-template-columns: 300px 1fr;
@@ -196,62 +270,40 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
         }
         .profile-image-section,
         .profile-form {
-            background: #f8fafc;
-            border-radius: 14px;
+            background: linear-gradient(180deg, #ffffff, #f8fbff);
+            border-radius: 18px;
             padding: 22px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid rgba(37, 99, 235, 0.12);
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
         }
         .current-image {
             width: 200px;
             height: 200px;
-            border-radius: 50%;
+            border-radius: 32px;
             object-fit: cover;
-            border: 4px solid #e2e8f0;
+            border: 4px solid #dbeafe;
             margin-bottom: 20px;
         }
         .form-section {
             margin-bottom: 28px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid rgba(236, 72, 153, 0.12);
+        }
+        .form-section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
         }
         .form-section h3 {
             margin: 0 0 16px;
             color: #1f2937;
-            font-size: 1.15rem;
+            font-size: 1.12rem;
+            font-family: 'Poppins', sans-serif;
         }
         .form-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
         }
-        .form-group { margin-bottom: 16px; }
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #374151;
-        }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 10px;
-            font-size: 15px;
-            box-sizing: border-box;
-            background: white;
-        }
-        .form-group textarea { min-height: 90px; resize: vertical; }
-        .btn {
-            background: #2563eb;
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .btn:hover { background: #1d4ed8; }
         .message {
             padding: 15px;
             border-radius: 10px;
@@ -264,6 +316,58 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
             font-size: 0.92rem;
             margin-top: 6px;
         }
+        .guided-row {
+            display: grid;
+            gap: 10px;
+        }
+        .guided-checklist {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 14px;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            background: #ffffff;
+        }
+        .guided-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            font-weight: 500;
+            color: #334155;
+        }
+        .guided-option input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        .guided-note {
+            color: #64748b;
+            font-size: 0.82rem;
+        }
+        .suggestion-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .suggestion-chip {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .suggestion-chip:hover {
+            background: #dbeafe;
+        }
+        .custom-field {
+            display: none;
+            margin-top: 10px;
+        }
         @media (max-width: 768px) {
             .profile-grid,
             .form-grid {
@@ -273,23 +377,26 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
                 width: 160px;
                 height: 160px;
             }
+            .guided-checklist {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
+<body class="form-page">
+    <div class="form-shell profile-shell">
+        <div class="form-hero">
             <h1>Student / Parent Profile</h1>
-            <p>Set your curriculum, study level, location, and learning goals so SOTMS Pro can recommend the right tutors.</p>
+            <p>Update your details for better tutor matches.</p>
         </div>
 
-        <div class="nav">
+        <div class="form-nav">
             <a href="dashboard.php">Back to Dashboard</a>
             <a href="find_tutors.php">Find Tutors</a>
             <a href="../config/auth/logout.php">Logout</a>
         </div>
 
-        <div class="content">
+        <div class="form-content profile-content">
             <?php if ($message): ?>
                 <div class="message <?php echo htmlspecialchars($messageType); ?>">
                     <?php echo htmlspecialchars($message); ?>
@@ -316,7 +423,7 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
 
                     <div class="profile-form">
                         <div class="form-section">
-                            <h3>Learner Details</h3>
+                            <h3>Learner</h3>
                             <div class="form-grid">
                                 <div class="form-group">
                                     <label for="full_name">Full Name</label>
@@ -330,7 +437,6 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
                                     <label for="education_level">Education Level</label>
                                     <select id="education_level" name="education_level">
                                         <?php
-                                        $selectedEducation = $profile['education_level'] ?? 'high_school';
                                         if (!isset($educationLevelOptions[$selectedEducation]) && $selectedEducation !== ''):
                                         ?>
                                             <option value="<?php echo htmlspecialchars($selectedEducation); ?>" selected><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $selectedEducation))); ?> (Existing)</option>
@@ -341,71 +447,108 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
                                             <option value="<?php echo $value; ?>" <?php echo $selectedEducation === $value ? 'selected' : ''; ?>><?php echo $label; ?></option>
                                         <?php endforeach; ?>
                                     </select>
-                                    <div class="help-text">Choose the broad stage first, then specify the exact class, year, diploma, or degree level below.</div>
+                                    <div class="help-text">Choose the stage first.</div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="level_of_study">Class / Level of Study</label>
-                                    <input type="text" id="level_of_study" name="level_of_study" list="study_level_options" value="<?php echo htmlspecialchars($profile['study_level_display'] ?? ($profile['level_of_study'] ?? '')); ?>" placeholder="e.g. Grade 8, Diploma Year 1, Bachelor's Year 2, Master's Coursework">
-                                    <datalist id="study_level_options">
-                                        <?php foreach (array_unique(array_merge($studyLevelSuggestions, $catalogOptions['study_levels'])) as $studyLevelOption): ?>
-                                            <option value="<?php echo htmlspecialchars($studyLevelOption); ?>"></option>
+                                    <label for="level_of_study">Study Level</label>
+                                    <select id="level_of_study" name="level_of_study">
+                                        <option value="">Select level</option>
+                                        <?php foreach ($initialStudyLevels as $studyLevelOption): ?>
+                                            <option value="<?php echo htmlspecialchars($studyLevelOption); ?>" <?php echo $currentStudyLevel === $studyLevelOption ? 'selected' : ''; ?>><?php echo htmlspecialchars($studyLevelOption); ?></option>
                                         <?php endforeach; ?>
-                                    </datalist>
-                                    <div class="help-text">Examples: Grade 8, Form 4, Certificate Year 1, Diploma Year 2, Bachelor's Year 3, Master's Coursework, PhD Candidate.</div>
+                                        <option value="__custom__" <?php echo !$studyLevelIsPreset && $currentStudyLevel !== '' ? 'selected' : ''; ?>>Other / Custom</option>
+                                    </select>
+                                    <input type="text" id="level_of_study_custom" name="level_of_study_custom" class="custom-field" value="<?php echo htmlspecialchars($currentStudyLevel); ?>" placeholder="Other level" <?php echo !$studyLevelIsPreset && $currentStudyLevel !== '' ? 'style="display:block;"' : ''; ?>>
+                                    <input type="hidden" id="initial_level_of_study" value="<?php echo htmlspecialchars($currentStudyLevel); ?>">
+                                    <div class="help-text" id="study-level-help">Pick the exact class or year.</div>
+                                    <div class="suggestion-list" id="study-level-suggestions"></div>
                                 </div>
                                 <div class="form-group">
                                     <label for="current_institution">School / Institution</label>
                                     <input type="text" id="current_institution" name="current_institution" value="<?php echo htmlspecialchars($profile['current_institution'] ?? ''); ?>" placeholder="e.g. Alliance High School">
                                 </div>
                                 <div class="form-group">
-                                    <label for="curriculum">Curriculum / Programme Track</label>
-                                    <input type="text" id="curriculum" name="curriculum" list="curriculum_options" value="<?php echo htmlspecialchars($profile['curriculum_display'] ?? ($profile['curriculum'] ?? '')); ?>" placeholder="e.g. CBC, 8-4-4, IGCSE, KCSE, IB, TVET, University Degree">
-                                    <datalist id="curriculum_options">
-                                        <?php foreach (array_unique(array_merge($catalogOptions['curricula'], ['TVET', 'University Degree', 'Professional Programme'])) as $curriculumOption): ?>
-                                            <option value="<?php echo htmlspecialchars($curriculumOption); ?>"></option>
+                                    <label for="curriculum">Curriculum</label>
+                                    <select id="curriculum" name="curriculum">
+                                        <option value="">Select curriculum</option>
+                                        <?php foreach ($initialCurricula as $curriculumOption): ?>
+                                            <option value="<?php echo htmlspecialchars($curriculumOption); ?>" <?php echo $currentCurriculum === $curriculumOption ? 'selected' : ''; ?>><?php echo htmlspecialchars($curriculumOption); ?></option>
                                         <?php endforeach; ?>
-                                    </datalist>
-                                    <div class="help-text">Use school curricula like CBC or IGCSE, or a broader programme track like TVET, University Degree, or Professional Programme.</div>
+                                        <option value="__custom__" <?php echo !$curriculumIsPreset && $currentCurriculum !== '' ? 'selected' : ''; ?>>Other / Custom</option>
+                                    </select>
+                                    <input type="text" id="curriculum_custom" name="curriculum_custom" class="custom-field" value="<?php echo htmlspecialchars($currentCurriculum); ?>" placeholder="Other curriculum" <?php echo !$curriculumIsPreset && $currentCurriculum !== '' ? 'style="display:block;"' : ''; ?>>
+                                    <input type="hidden" id="initial_curriculum" value="<?php echo htmlspecialchars($currentCurriculum); ?>">
+                                    <div class="help-text" id="curriculum-help">Pick the main curriculum or track.</div>
+                                    <div class="suggestion-list" id="curriculum-suggestions"></div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="location">Geographical Area</label>
-                                    <input type="text" id="location" name="location" value="<?php echo htmlspecialchars($profile['location'] ?? ''); ?>" placeholder="e.g. Nairobi, Kisumu, Westlands">
+                                    <label for="location">Location</label>
+                                    <select id="location" name="location">
+                                        <option value="">Select area</option>
+                                        <?php foreach ($locationOptions as $locationOption): ?>
+                                            <option value="<?php echo htmlspecialchars($locationOption); ?>" <?php echo $currentLocation === $locationOption ? 'selected' : ''; ?>><?php echo htmlspecialchars($locationOption); ?></option>
+                                        <?php endforeach; ?>
+                                        <option value="__custom__" <?php echo !$locationIsPreset && $currentLocation !== '' ? 'selected' : ''; ?>>Other / Custom</option>
+                                    </select>
+                                    <input type="text" id="location_custom" name="location_custom" class="custom-field" value="<?php echo htmlspecialchars($currentLocation); ?>" placeholder="Other location" <?php echo !$locationIsPreset && $currentLocation !== '' ? 'style="display:block;"' : ''; ?>>
+                                    <input type="hidden" id="initial_location" value="<?php echo htmlspecialchars($currentLocation); ?>">
                                 </div>
                                 <div class="form-group">
-                                    <label for="preferred_radius_km">Preferred Tutor Radius (KM)</label>
+                                    <label for="preferred_radius_km">Tutor Radius (KM)</label>
                                     <input type="number" id="preferred_radius_km" name="preferred_radius_km" min="5" max="500" value="<?php echo htmlspecialchars((string) ($profile['preferred_radius_km'] ?? 50)); ?>">
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3>Parent / Guardian Contact</h3>
+                            <h3>Guardian</h3>
                             <div class="form-grid">
                                 <div class="form-group">
-                                    <label for="guardian_name">Parent / Guardian Name</label>
+                                    <label for="guardian_name">Guardian Name</label>
                                     <input type="text" id="guardian_name" name="guardian_name" value="<?php echo htmlspecialchars($profile['guardian_name'] ?? ''); ?>">
                                 </div>
                                 <div class="form-group">
-                                    <label for="guardian_phone">Parent / Guardian Phone</label>
+                                    <label for="guardian_phone">Guardian Phone</label>
                                     <input type="tel" id="guardian_phone" name="guardian_phone" value="<?php echo htmlspecialchars($profile['guardian_phone'] ?? ''); ?>">
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3>Learning Preferences</h3>
+                            <h3>Learning</h3>
                             <div class="form-group">
-                                <label for="subjects_interested">Subjects Interested In</label>
-                                <textarea id="subjects_interested" name="subjects_interested" placeholder="Math, English, Physics, Chemistry, Computer Studies"><?php echo htmlspecialchars($profile['subjects_display'] ?? ($profile['subjects_interested'] ?? '')); ?></textarea>
-                                <div class="help-text">Separate subjects with commas so tutors can match you accurately. Suggested subjects: <?php echo htmlspecialchars(implode(', ', array_slice($catalogOptions['subjects'], 0, 10))); ?></div>
+                                <label for="subjects_interested_select">Subjects</label>
+                                <div class="guided-row">
+                                    <div id="subjects_interested_select" class="guided-checklist">
+                                        <?php foreach ($catalogOptions['subjects'] as $subjectOption): ?>
+                                            <label class="guided-option">
+                                                <input
+                                                    type="checkbox"
+                                                    name="subjects_interested_select[]"
+                                                    value="<?php echo htmlspecialchars($subjectOption); ?>"
+                                                    <?php echo in_array($subjectOption, $selectedSubjectOptions, true) ? 'checked' : ''; ?>
+                                                >
+                                                <?php echo htmlspecialchars($subjectOption); ?>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        id="custom_subjects_interested"
+                                        name="custom_subjects_interested"
+                                        value="<?php echo htmlspecialchars($customSubjectsValue); ?>"
+                                        placeholder="Other subject"
+                                    >
+                                    <div class="guided-note">Select all that apply.</div>
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="goals">Learning Goals</label>
-                                <textarea id="goals" name="goals" placeholder="What do you want tutoring to help you achieve?"><?php echo htmlspecialchars($profile['goals'] ?? ''); ?></textarea>
+                                <label for="goals">Goals</label>
+                                <textarea id="goals" name="goals" placeholder="What should tutoring help with?"><?php echo htmlspecialchars($profile['goals'] ?? ''); ?></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="bio">Additional Notes</label>
-                                <textarea id="bio" name="bio" placeholder="Any details that will help tutors support you better"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
+                                <label for="bio">Notes</label>
+                                <textarea id="bio" name="bio" placeholder="Any helpful details"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
                             </div>
                         </div>
 
@@ -415,5 +558,127 @@ $profile = fetchStudentProfile($pdo, $_SESSION['user_id']);
             </form>
         </div>
     </div>
+    <script>
+        const studyLevelSuggestionsByEducation = <?php echo json_encode($studyLevelSuggestionsByEducation, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        const curriculumSuggestionsByEducation = <?php echo json_encode($curriculumSuggestionsByEducation, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+
+        const educationLevelField = document.getElementById('education_level');
+        const studyLevelField = document.getElementById('level_of_study');
+        const studyLevelCustomField = document.getElementById('level_of_study_custom');
+        const initialStudyLevelField = document.getElementById('initial_level_of_study');
+        const studyLevelHelp = document.getElementById('study-level-help');
+        const studyLevelSuggestions = document.getElementById('study-level-suggestions');
+        const curriculumField = document.getElementById('curriculum');
+        const curriculumCustomField = document.getElementById('curriculum_custom');
+        const initialCurriculumField = document.getElementById('initial_curriculum');
+        const curriculumHelp = document.getElementById('curriculum-help');
+        const curriculumSuggestions = document.getElementById('curriculum-suggestions');
+        const locationField = document.getElementById('location');
+        const locationCustomField = document.getElementById('location_custom');
+        const initialLocationField = document.getElementById('initial_location');
+
+        function getActiveValue(selectField, customField, initialField) {
+            if (selectField.value && selectField.value !== '__custom__') {
+                return selectField.value;
+            }
+
+            if (customField.value.trim() !== '') {
+                return customField.value.trim();
+            }
+
+            return initialField.value.trim();
+        }
+
+        function fillSelectOptions(selectField, values, currentValue, placeholder) {
+            selectField.innerHTML = '';
+
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = placeholder;
+            selectField.appendChild(placeholderOption);
+
+            const uniqueValues = [...new Set(values.filter((value) => value && value.trim() !== ''))];
+            uniqueValues.forEach((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                selectField.appendChild(option);
+            });
+
+            const customOption = document.createElement('option');
+            customOption.value = '__custom__';
+            customOption.textContent = 'Other / Custom';
+            selectField.appendChild(customOption);
+
+            if (currentValue && uniqueValues.includes(currentValue)) {
+                selectField.value = currentValue;
+            } else if (currentValue) {
+                selectField.value = '__custom__';
+            } else {
+                selectField.value = '';
+            }
+        }
+
+        function toggleCustomField(selectField, customField, currentValue) {
+            if (selectField.value === '__custom__') {
+                customField.style.display = 'block';
+                if (!customField.value.trim() && currentValue) {
+                    customField.value = currentValue;
+                }
+            } else {
+                customField.style.display = 'none';
+            }
+        }
+
+        function fillSuggestionList(containerEl, values, selectField, customField) {
+            containerEl.innerHTML = '';
+            values.forEach((value) => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'suggestion-chip';
+                chip.textContent = value;
+                chip.addEventListener('click', () => {
+                    selectField.value = value;
+                    customField.style.display = 'none';
+                    selectField.focus();
+                });
+                containerEl.appendChild(chip);
+            });
+        }
+
+        function updateEducationGuidance() {
+            const selectedEducation = educationLevelField.value || 'other';
+            const studyLevels = studyLevelSuggestionsByEducation[selectedEducation] || studyLevelSuggestionsByEducation.other;
+            const curricula = curriculumSuggestionsByEducation[selectedEducation] || curriculumSuggestionsByEducation.other;
+            const currentStudyLevel = getActiveValue(studyLevelField, studyLevelCustomField, initialStudyLevelField);
+            const currentCurriculum = getActiveValue(curriculumField, curriculumCustomField, initialCurriculumField);
+
+            fillSelectOptions(studyLevelField, studyLevels, currentStudyLevel, 'Select the exact class or study level');
+            fillSelectOptions(curriculumField, curricula, currentCurriculum, 'Select the curriculum or programme track');
+            fillSuggestionList(studyLevelSuggestions, studyLevels, studyLevelField, studyLevelCustomField);
+            fillSuggestionList(curriculumSuggestions, curricula, curriculumField, curriculumCustomField);
+            toggleCustomField(studyLevelField, studyLevelCustomField, currentStudyLevel);
+            toggleCustomField(curriculumField, curriculumCustomField, currentCurriculum);
+
+            if (studyLevels.length > 0) {
+                studyLevelHelp.textContent = 'Suggested: ' + studyLevels.join(', ') + '.';
+            } else {
+                studyLevelHelp.textContent = 'Enter the exact class or year.';
+            }
+
+            if (curricula.length > 0) {
+                curriculumHelp.textContent = 'Suggested: ' + curricula.join(', ') + '.';
+            } else {
+                curriculumHelp.textContent = 'Enter the curriculum or track.';
+            }
+        }
+
+        educationLevelField.addEventListener('change', updateEducationGuidance);
+        studyLevelField.addEventListener('change', () => toggleCustomField(studyLevelField, studyLevelCustomField, initialStudyLevelField.value.trim()));
+        curriculumField.addEventListener('change', () => toggleCustomField(curriculumField, curriculumCustomField, initialCurriculumField.value.trim()));
+        locationField.addEventListener('change', () => toggleCustomField(locationField, locationCustomField, initialLocationField.value.trim()));
+        updateEducationGuidance();
+        toggleCustomField(locationField, locationCustomField, initialLocationField.value.trim());
+    </script>
 </body>
 </html>

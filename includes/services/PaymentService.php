@@ -1,11 +1,11 @@
 <?php
 
+require_once __DIR__ . '/PesapalService.php';
+
 class PaymentService {
     public static function supportedProviders() {
         return [
-            'mpesa' => 'M-Pesa',
-            'pesapal' => 'Pesapal',
-            'paypal' => 'PayPal',
+            'pesapal' => 'PesaPal',
         ];
     }
 
@@ -33,15 +33,14 @@ class PaymentService {
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
-    public static function submitSessionPayment(PDO $pdo, array $session, $studentId, $studentUserId, $provider) {
+    public static function submitSessionPayment(PDO $pdo, array $session, $studentId, $studentUserId, $provider = 'pesapal') {
         ensurePlatformStructures($pdo);
 
-        $providers = self::supportedProviders();
-        if (!isset($providers[$provider])) {
+        if ($provider !== 'pesapal') {
             return [
                 'success' => false,
                 'type' => 'error',
-                'message' => 'Please select a valid payment channel.',
+                'message' => 'PesaPal is the only enabled payment channel.',
                 'session' => $session,
             ];
         }
@@ -50,52 +49,76 @@ class PaymentService {
             return [
                 'success' => true,
                 'type' => 'success',
-                'message' => 'This session already has a paid payment record.',
+                'message' => 'This session is already paid.',
                 'session' => $session,
             ];
         }
 
-        $stmt = $pdo->prepare("SELECT * FROM payments WHERE session_id = ? ORDER BY id DESC LIMIT 1");
-        $stmt->execute([$session['id']]);
-        $existingPayment = $stmt->fetch(PDO::FETCH_ASSOC);
+        $existingPayment = self::findLatestPaymentForSession($pdo, $session['id']);
         if ($existingPayment) {
             if (($existingPayment['status'] ?? '') === 'paid') {
-                $updateStmt = $pdo->prepare("UPDATE sessions SET payment_status = 'paid' WHERE id = ?");
-                $updateStmt->execute([$session['id']]);
+                $pdo->prepare("UPDATE sessions SET payment_status = 'paid' WHERE id = ?")->execute([$session['id']]);
                 $session['payment_status'] = 'paid';
 
                 return [
                     'success' => true,
                     'type' => 'success',
-                    'message' => 'This session already has a paid payment record.',
+                    'message' => 'This session is already paid.',
                     'session' => $session,
                 ];
             }
 
             if (in_array($existingPayment['status'], ['pending', 'gateway_submitted'], true)) {
-                $updateStmt = $pdo->prepare("UPDATE sessions SET payment_status = 'processing' WHERE id = ?");
-                $updateStmt->execute([$session['id']]);
+                $storedData = self::decodePaymentData($existingPayment['payment_data'] ?? null);
+                if (!empty($storedData['redirect_url'])) {
+                    return [
+                        'success' => true,
+                        'type' => 'success',
+                        'message' => 'Continue your PesaPal checkout.',
+                        'session' => $session,
+                        'redirect_url' => $storedData['redirect_url'],
+                    ];
+                }
+
+                $pdo->prepare("UPDATE sessions SET payment_status = 'processing' WHERE id = ?")->execute([$session['id']]);
                 $session['payment_status'] = 'processing';
 
                 return [
                     'success' => true,
                     'type' => 'success',
-                    'message' => 'A payment submission is already awaiting verification.',
+                    'message' => 'A PesaPal payment is already awaiting confirmation.',
                     'session' => $session,
                 ];
             }
         }
 
-        $reference = 'SOTMS-' . strtoupper(substr($provider, 0, 3)) . '-' . time() . '-' . $session['id'];
-        $amount = (float) ($session['payment_amount'] ?: $session['amount'] ?: 500);
-
         try {
+            $payer = self::fetchStudentPayerDetails($pdo, $studentUserId);
+            $reference = self::buildReference($session['id']);
+            $amount = (float) ($session['payment_amount'] ?: $session['amount'] ?: 500);
+
+            $checkout = PesapalService::createCheckout([
+                'reference' => $reference,
+                'amount' => $amount,
+                'currency' => 'KES',
+                'description' => trim(($session['subject'] ?: 'Tutoring session') . ' with ' . ($session['tutor_name'] ?: 'Tutor')),
+            ], $payer);
+
+            $paymentData = [
+                'workflow_state' => 'gateway_submitted',
+                'student_user_id' => $studentUserId,
+                'redirect_url' => $checkout['redirect_url'],
+                'notification_id' => $checkout['notification_id'],
+                'gateway_response' => $checkout['raw'],
+                'submitted_at' => date('c'),
+            ];
+
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare('
                 INSERT INTO payments (
-                    session_id, student_id, tutor_id, amount, currency, provider, tracking_id, reference, status, payment_data
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    session_id, student_id, tutor_id, amount, currency, provider, tracking_id, reference, status, pesapal_txn_id, payment_data
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
                 $session['id'],
@@ -103,26 +126,23 @@ class PaymentService {
                 $session['tutor_id'],
                 $amount,
                 'KES',
-                $provider,
-                $reference,
+                'pesapal',
+                $checkout['order_tracking_id'],
                 $reference,
                 'gateway_submitted',
-                json_encode([
-                    'mode' => 'demo',
-                    'workflow_state' => 'gateway_submitted',
-                    'student_user_id' => $studentUserId,
-                    'submitted_at' => date('c'),
-                ]),
+                $checkout['order_tracking_id'],
+                json_encode($paymentData),
             ]);
 
             $paymentId = (int) $pdo->lastInsertId();
-            self::logPaymentEvent($pdo, $paymentId, 'submitted', 'Payment submitted by student checkout.', $studentUserId, [
-                'provider' => $provider,
+            self::logPaymentEvent($pdo, $paymentId, 'gateway_submitted', 'PesaPal checkout created.', $studentUserId, [
+                'provider' => 'pesapal',
                 'reference' => $reference,
+                'tracking_id' => $checkout['order_tracking_id'],
+                'redirect_url' => $checkout['redirect_url'],
             ]);
 
-            $stmt = $pdo->prepare("UPDATE sessions SET payment_status = 'processing' WHERE id = ?");
-            $stmt->execute([$session['id']]);
+            $pdo->prepare("UPDATE sessions SET payment_status = 'processing' WHERE id = ?")->execute([$session['id']]);
 
             $pdo->commit();
             $session['payment_status'] = 'processing';
@@ -130,33 +150,60 @@ class PaymentService {
             return [
                 'success' => true,
                 'type' => 'success',
-                'message' => 'Payment submitted successfully and is now awaiting verification.',
+                'message' => 'Redirecting to PesaPal checkout.',
                 'session' => $session,
+                'redirect_url' => $checkout['redirect_url'],
             ];
-        } catch (PDOException $e) {
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
 
-            error_log('Pay session error: ' . $e->getMessage());
+            error_log('PesaPal checkout error: ' . $e->getMessage());
 
             return [
                 'success' => false,
                 'type' => 'error',
-                'message' => 'Payment could not be recorded.',
+                'message' => $e->getMessage(),
                 'session' => $session,
             ];
         }
-    }
-
-    public static function recordDemoSessionPayment(PDO $pdo, array $session, $studentId, $studentUserId, $provider) {
-        return self::submitSessionPayment($pdo, $session, $studentId, $studentUserId, $provider);
     }
 
     public static function findPaymentByReference(PDO $pdo, $reference) {
         ensurePlatformStructures($pdo);
 
         $stmt = $pdo->prepare("SELECT * FROM payments WHERE reference = ? LIMIT 1");
+        $stmt->execute([$reference]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public static function findPaymentByTrackingId(PDO $pdo, $trackingId) {
+        ensurePlatformStructures($pdo);
+
+        $stmt = $pdo->prepare("SELECT * FROM payments WHERE tracking_id = ? OR pesapal_txn_id = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$trackingId, $trackingId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public static function fetchPaymentStatusContext(PDO $pdo, $reference) {
+        ensurePlatformStructures($pdo);
+
+        $stmt = $pdo->prepare("
+            SELECT
+                p.*,
+                s.subject,
+                s.payment_status,
+                s.session_date,
+                tutor_user.name AS tutor_name
+            FROM payments p
+            LEFT JOIN sessions s ON s.id = p.session_id
+            LEFT JOIN tutors t ON s.tutor_id = t.id
+            LEFT JOIN users tutor_user ON tutor_user.id = t.user_id
+            WHERE p.reference = ?
+            ORDER BY p.id DESC
+            LIMIT 1
+        ");
         $stmt->execute([$reference]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -176,16 +223,27 @@ class PaymentService {
             throw new RuntimeException('Payment not found.');
         }
 
-        $updateFields = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
-        $params = [$targetStatus];
+        $paymentData = self::decodePaymentData($payment['payment_data'] ?? null);
+        if (!empty($attributes)) {
+            $paymentData = array_merge($paymentData, $attributes);
+        }
+
+        $updateFields = ['status = ?', 'updated_at = CURRENT_TIMESTAMP', 'payment_data = ?'];
+        $params = [$targetStatus, !empty($paymentData) ? json_encode($paymentData) : null];
+
+        if (!empty($attributes['tracking_id'])) {
+            $updateFields[] = 'tracking_id = ?';
+            $params[] = $attributes['tracking_id'];
+        }
 
         if (!empty($attributes['pesapal_txn_id'])) {
             $updateFields[] = 'pesapal_txn_id = ?';
             $params[] = $attributes['pesapal_txn_id'];
         }
-        if (!empty($attributes['paypal_payment_id'])) {
-            $updateFields[] = 'paypal_payment_id = ?';
-            $params[] = $attributes['paypal_payment_id'];
+
+        if (!empty($attributes['provider'])) {
+            $updateFields[] = 'provider = ?';
+            $params[] = $attributes['provider'];
         }
 
         $params[] = $paymentId;
@@ -271,6 +329,49 @@ class PaymentService {
         ");
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private static function findLatestPaymentForSession(PDO $pdo, $sessionId) {
+        $stmt = $pdo->prepare("SELECT * FROM payments WHERE session_id = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$sessionId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    private static function fetchStudentPayerDetails(PDO $pdo, $studentUserId) {
+        $stmt = $pdo->prepare("
+            SELECT
+                u.name,
+                u.email,
+                sp.phone,
+                sp.location
+            FROM users u
+            LEFT JOIN student_profiles sp ON sp.user_id = u.id
+            WHERE u.id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$studentUserId]);
+        $payer = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'name' => trim((string) ($payer['name'] ?? 'Student')),
+            'email' => trim((string) ($payer['email'] ?? '')),
+            'phone' => trim((string) ($payer['phone'] ?? '')),
+            'city' => trim((string) ($payer['location'] ?? '')),
+            'address_line' => 'SOTMS Pro',
+        ];
+    }
+
+    private static function buildReference($sessionId) {
+        return 'SOTMS-PES-' . $sessionId . '-' . date('YmdHis');
+    }
+
+    private static function decodePaymentData($value) {
+        if (empty($value)) {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     private static function logPaymentEvent(PDO $pdo, $paymentId, $eventType, $eventNote = '', $createdBy = null, array $eventData = []) {

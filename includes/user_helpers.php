@@ -128,18 +128,44 @@ function tokenizeLocation($value) {
     return array_keys($tokens);
 }
 
+function normalizeLocationParts($value) {
+    $segments = preg_split('/[\r\n,;\/]+/', strtolower((string) $value));
+    $parts = [];
+
+    foreach ($segments as $segment) {
+        $segment = trim(preg_replace('/\s+/', ' ', (string) $segment));
+        if ($segment === '') {
+            continue;
+        }
+
+        $parts[$segment] = ucwords($segment);
+        foreach (tokenizeLocation($segment) as $token) {
+            $parts[$token] = ucwords($token);
+        }
+    }
+
+    return $parts;
+}
+
 function matchLocationScore($studentLocation, $tutorLocation, $serviceAreas = '') {
-    $studentTokens = tokenizeLocation($studentLocation);
-    if (empty($studentTokens)) {
+    $studentParts = normalizeLocationParts($studentLocation);
+    if (empty($studentParts)) {
         return [0, null];
     }
 
-    $allTutorTokens = array_merge(tokenizeLocation($tutorLocation), tokenizeLocation($serviceAreas));
-    $lookup = array_flip($allTutorTokens);
+    $tutorParts = normalizeLocationParts($tutorLocation);
+    $serviceAreaParts = normalizeLocationParts($serviceAreas);
+    $combinedTutorParts = $tutorParts + $serviceAreaParts;
 
-    foreach ($studentTokens as $token) {
-        if (isset($lookup[$token])) {
-            return [2, ucwords($token)];
+    foreach ($studentParts as $key => $label) {
+        if (strpos($key, ' ') !== false && isset($combinedTutorParts[$key])) {
+            return [3, $label];
+        }
+    }
+
+    foreach ($studentParts as $key => $label) {
+        if (isset($combinedTutorParts[$key])) {
+            return [2, $label];
         }
     }
 

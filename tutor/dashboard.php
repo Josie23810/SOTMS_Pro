@@ -7,7 +7,7 @@ checkAccess(['tutor']);
 ensurePlatformStructures($pdo);
 
 $tutorId = getTutorId($pdo, $_SESSION['user_id']);
-$profile = fetchTutorProfile($pdo, $_SESSION['user_id']);
+$profile = fetchTutorProfile($pdo, $_SESSION['user_id']) ?: [];
 
 $stats = [
     'upcoming' => 0,
@@ -45,7 +45,10 @@ try {
         LEFT JOIN students st ON s.student_id = st.id
         LEFT JOIN users u ON st.user_id = u.id
         WHERE s.tutor_id = ?
-        ORDER BY s.session_date ASC
+        ORDER BY
+            CASE WHEN s.session_date >= NOW() THEN 0 ELSE 1 END,
+            CASE WHEN s.session_date >= NOW() THEN s.session_date END ASC,
+            CASE WHEN s.session_date < NOW() THEN s.session_date END DESC
         LIMIT 5
     ");
     $stmt->execute([$tutorId]);
@@ -53,6 +56,17 @@ try {
 } catch (PDOException $e) {
     error_log('Tutor dashboard error: ' . $e->getMessage());
 }
+
+$tutorDisplayName = $profile['full_name'] ?? ($_SESSION['name'] ?? 'Tutor');
+$tutorInitial = strtoupper(substr($tutorDisplayName, 0, 1));
+$verificationStatus = ucfirst(str_replace('_', ' ', (string) ($profile['verification_status'] ?? 'submitted')));
+$locationSummary = trim((string) ($profile['location'] ?? ''));
+$locationSummary = $locationSummary !== '' ? $locationSummary : 'Add location';
+$availabilitySummary = trim((string) ($profile['availability_summary'] ?? ''));
+$availabilitySummary = $availabilitySummary !== '' ? $availabilitySummary : 'Add availability';
+$subjects = array_values(array_filter(array_map('trim', explode(',', (string) ($profile['subjects_taught_display'] ?? '')))));
+$subjectSummary = !empty($subjects) ? implode(', ', array_slice($subjects, 0, 3)) : 'Add subjects';
+$subjectCount = count($subjects);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -61,111 +75,225 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tutor Dashboard - SOTMS PRO</title>
     <link rel="stylesheet" href="../assets/css/style.css">
-    <style>
-        body { font-family: 'Poppins', sans-serif; background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(15,23,42,0.55)), url('../uploads/image003.jpg') center/cover no-repeat; color: #1f2937; margin: 0; padding: 20px; }
-        .dashboard-container { max-width: 1400px; margin: 0 auto; background: rgba(255,255,255,0.96); border-radius: 16px; box-shadow: 0 24px 50px rgba(15,23,42,0.18); overflow: hidden; display: flex; min-height: 80vh; }
-        .sidebar { width: 260px; background: linear-gradient(180deg, #111827, #0f172a); padding: 32px 20px; color: white; }
-        .sidebar h2 { margin: 0 0 24px; font-size: 1.15rem; color: #e2e8f0; }
-        .sidebar .nav-link { display: block; width: 100%; margin-bottom: 12px; padding: 14px 16px; border-radius: 12px; color: white; text-decoration: none; font-size: 15px; font-weight: 600; background: rgba(255,255,255,0.08); }
-        .sidebar .nav-link:hover, .sidebar .nav-link.active { background: rgba(56,189,248,0.18); }
-        .sidebar .primary-link { background: #2563eb; }
-        .sidebar .logout-btn { margin-top: 28px; background: rgba(239,68,68,0.85); }
-        .main-content { flex: 1; padding: 30px; }
-        .header { background: linear-gradient(135deg, #1d4ed8, #2563eb); color: white; padding: 30px; border-radius: 20px; margin-bottom: 30px; display:flex; justify-content:space-between; gap:20px; align-items:center; }
-        .header h1 { margin: 0; font-size: 2.4rem; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px; margin-bottom: 30px; }
-        .stat-card, .panel { background: white; border-radius: 18px; border: 1px solid #e5e7eb; padding: 24px; box-shadow: 0 12px 24px rgba(15,23,42,0.08); }
-        .stat-card h3 { margin: 0; font-size: 1rem; color: #374151; }
-        .stat-card .number { margin-top: 16px; font-size: 2.4rem; font-weight: 700; color: #1d4ed8; }
-        .panel { margin-bottom: 26px; }
-        .panel h2 { margin-top: 0; }
-        .session-item { display:flex; justify-content:space-between; gap:20px; padding:18px 20px; border-radius:14px; border:1px solid #e5e7eb; margin-bottom:14px; background:#f9fafb; }
-        .status-pill { display:inline-flex; align-items:center; justify-content:center; padding:8px 14px; border-radius:999px; font-size:0.8rem; font-weight:700; text-transform:uppercase; }
-        .pending { background:#fef3c7; color:#b45309; }
-        .confirmed { background:#dbeafe; color:#1d4ed8; }
-        .completed { background:#d1fae5; color:#065f46; }
-        .cancelled { background:#fee2e2; color:#991b1b; }
-        .btn { display:inline-flex; align-items:center; justify-content:center; background:#2563eb; color:white; border:none; border-radius:12px; padding:12px 20px; font-size:0.95rem; font-weight:700; cursor:pointer; text-decoration:none; }
-        .btn:hover { background:#1d4ed8; }
-        .btn-secondary { background:#f3f4f6; color:#111827; }
-        .btn-secondary:hover { background:#e5e7eb; }
-        @media (max-width: 992px) { .dashboard-container { flex-direction: column; } .sidebar { width: 100%; padding: 22px; } .header { flex-direction: column; align-items: stretch; } }
-    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/dashboard_improvements.css">
 </head>
-<body>
-    <div class="dashboard-container">
-        <div class="sidebar">
-            <h2>Tutor Control Panel</h2>
-            <a href="schedule.php" class="nav-link primary-link">Manage Schedule</a>
-            <a href="upload_materials.php" class="nav-link">Upload Materials</a>
-            <a href="messages.php" class="nav-link">Messages</a>
-            <a href="profile.php" class="nav-link">My Profile</a>
-            <a href="my_sessions.php" class="nav-link">My Sessions</a>
-            <a href="../config/auth/logout.php" class="nav-link logout-btn">Logout</a>
-        </div>
-
-        <div class="main-content">
-            <div class="header">
+<body class="portal-page tutor-portal">
+    <div class="portal-shell">
+        <aside class="portal-sidebar">
+            <div class="brand-mark">
+                <div class="brand-badge"><i class="fas fa-chalkboard-teacher"></i></div>
                 <div>
-                    <h1>Welcome back, <?php echo htmlspecialchars($_SESSION['name']); ?></h1>
-                    <p style="margin:10px 0 0; opacity:0.92;">Manage your schedule, avoid session collisions, upload learning materials, and keep your tutor profile visible to students who match your curriculum and location.</p>
-                </div>
-                <div style="background:rgba(255,255,255,0.14); border-radius:20px; padding:16px 18px; min-width:210px;">
-                    <div style="font-size:0.85rem; opacity:0.85;">Verification</div>
-                    <div style="font-size:1.5rem; font-weight:700; margin-top:8px;"><?php echo htmlspecialchars(ucfirst($profile['verification_status'] ?? 'submitted')); ?></div>
-                    <div style="margin-top:8px;"><?php echo htmlspecialchars($profile['location'] ?? 'Location not set'); ?></div>
+                    <div>SOTMS Pro</div>
+                    <div class="portal-user-role">Tutor Portal</div>
                 </div>
             </div>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Upcoming Sessions</h3>
-                    <div class="number"><?php echo $stats['upcoming']; ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Pending Requests</h3>
-                    <div class="number"><?php echo $stats['pending']; ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Completed Sessions</h3>
-                    <div class="number"><?php echo $stats['completed']; ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Paid Sessions</h3>
-                    <div class="number"><?php echo $stats['paid_sessions']; ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Materials Uploaded</h3>
-                    <div class="number"><?php echo $stats['materials']; ?></div>
-                </div>
+            <div class="portal-user">
+                <div class="portal-avatar"><?php echo htmlspecialchars($tutorInitial); ?></div>
+                <div class="portal-user-name"><?php echo htmlspecialchars($tutorDisplayName); ?></div>
+                <div class="portal-user-role">Tutor account</div>
             </div>
 
-            <div class="panel">
-                <h2>Next Sessions</h2>
-                <?php if (empty($recentSessions)): ?>
-                    <p style="color:#6b7280;">No sessions are currently assigned to you.</p>
-                <?php else: ?>
-                    <?php foreach ($recentSessions as $session): ?>
-                        <div class="session-item">
-                            <div>
-                                <strong><?php echo htmlspecialchars($session['student_name'] ?: 'Student'); ?></strong>
-                                <div style="margin-top:8px; color:#6b7280; line-height:1.6;">
-                                    Subject: <?php echo htmlspecialchars($session['subject']); ?><br>
-                                    Date: <?php echo date('M j, Y g:i A', strtotime($session['session_date'])); ?><br>
-                                    Payment: <?php echo htmlspecialchars(ucfirst($session['payment_status'] ?: 'unpaid')); ?>
-                                </div>
-                            </div>
-                            <span class="status-pill <?php echo htmlspecialchars($session['status']); ?>"><?php echo htmlspecialchars($session['status']); ?></span>
+            <nav class="portal-nav">
+                <a href="dashboard.php" class="active"><i class="fas fa-house"></i> Dashboard</a>
+                <a href="schedule.php" class="primary-link"><i class="fas fa-calendar-plus"></i> Schedule</a>
+                <a href="my_sessions.php"><i class="fas fa-list-check"></i> Sessions</a>
+                <a href="upload_materials.php"><i class="fas fa-upload"></i> Materials</a>
+                <a href="messages.php"><i class="fas fa-envelope"></i> Messages</a>
+                <a href="profile.php"><i class="fas fa-user-gear"></i> Profile</a>
+                <a href="settings.php"><i class="fas fa-sliders"></i> Settings</a>
+                <a href="../config/auth/logout.php" class="logout-link"><i class="fas fa-right-from-bracket"></i> Logout</a>
+            </nav>
+
+            <div class="portal-sidebar-footer">
+                <div><i class="fas fa-shield-halved"></i> Secure teaching workspace</div>
+                <div class="footer-links">
+                    <a href="schedule.php">Schedule</a>
+                    <a href="upload_materials.php">Materials</a>
+                    <a href="profile.php">Profile</a>
+                </div>
+                <div>&copy; <?php echo date('Y'); ?> SOTMS Pro</div>
+            </div>
+        </aside>
+
+        <main class="portal-main">
+            <section class="hero-banner">
+                <div>
+                    <h1 class="hero-title">Your tutor workspace.</h1>
+                    <p class="hero-copy">Sessions, materials, and profile details in one place.</p>
+                </div>
+                <div class="hero-meta">
+                    <div class="hero-panel">
+                        <div class="hero-panel-label">Verification</div>
+                        <div class="hero-panel-value"><?php echo htmlspecialchars($verificationStatus); ?></div>
+                        <div class="hero-panel-subtext"><?php echo htmlspecialchars($locationSummary); ?></div>
+                    </div>
+                    <div class="hero-panel">
+                        <div class="hero-panel-label">Subjects</div>
+                        <div class="hero-panel-value"><?php echo $subjectCount; ?></div>
+                        <div class="hero-panel-subtext"><?php echo htmlspecialchars($subjectSummary); ?></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-grid">
+                <article class="dashboard-card metric-card">
+                    <div class="metric-top">
+                        <div class="metric-label">Upcoming Sessions</div>
+                        <div class="metric-icon"><i class="fas fa-calendar-check"></i></div>
+                    </div>
+                    <div class="metric-value"><?php echo $stats['upcoming']; ?></div>
+                    <div class="metric-note">Next</div>
+                </article>
+                <article class="dashboard-card metric-card">
+                    <div class="metric-top">
+                        <div class="metric-label">Pending Requests</div>
+                        <div class="metric-icon"><i class="fas fa-hourglass-half"></i></div>
+                    </div>
+                    <div class="metric-value"><?php echo $stats['pending']; ?></div>
+                    <div class="metric-note">Waiting</div>
+                </article>
+                <article class="dashboard-card metric-card">
+                    <div class="metric-top">
+                        <div class="metric-label">Completed Sessions</div>
+                        <div class="metric-icon"><i class="fas fa-circle-check"></i></div>
+                    </div>
+                    <div class="metric-value"><?php echo $stats['completed']; ?></div>
+                    <div class="metric-note">Done</div>
+                </article>
+                <article class="dashboard-card metric-card">
+                    <div class="metric-top">
+                        <div class="metric-label">Paid Sessions</div>
+                        <div class="metric-icon"><i class="fas fa-wallet"></i></div>
+                    </div>
+                    <div class="metric-value"><?php echo $stats['paid_sessions']; ?></div>
+                    <div class="metric-note">Paid</div>
+                </article>
+                <article class="dashboard-card metric-card">
+                    <div class="metric-top">
+                        <div class="metric-label">Materials Uploaded</div>
+                        <div class="metric-icon"><i class="fas fa-folder-open"></i></div>
+                    </div>
+                    <div class="metric-value"><?php echo $stats['materials']; ?></div>
+                    <div class="metric-note">Files</div>
+                </article>
+            </section>
+
+            <section class="dashboard-card section-card">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">Quick Actions</h2>
+                    </div>
+                </div>
+                <div class="quick-actions">
+                    <a href="schedule.php" class="quick-action">
+                        <div class="quick-action-icon"><i class="fas fa-calendar-plus"></i></div>
+                        <div class="quick-action-title">Manage availability</div>
+                    </a>
+                    <a href="my_sessions.php" class="quick-action">
+                        <div class="quick-action-icon"><i class="fas fa-list-check"></i></div>
+                        <div class="quick-action-title">Review sessions</div>
+                    </a>
+                    <a href="upload_materials.php" class="quick-action">
+                        <div class="quick-action-icon"><i class="fas fa-upload"></i></div>
+                        <div class="quick-action-title">Upload materials</div>
+                    </a>
+                    <a href="profile.php" class="quick-action">
+                        <div class="quick-action-icon"><i class="fas fa-id-card"></i></div>
+                        <div class="quick-action-title">Update profile</div>
+                    </a>
+                </div>
+            </section>
+
+            <section class="dashboard-grid">
+                <article class="dashboard-card section-card">
+                    <div class="section-head">
+                        <div>
+                            <h2 class="section-title">Next Sessions</h2>
                         </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:18px;">
-                    <a href="schedule.php" class="btn">Open Schedule</a>
-                    <a href="upload_materials.php" class="btn btn-secondary">Manage Materials</a>
-                    <a href="profile.php" class="btn btn-secondary">Update Profile</a>
+                        <a href="my_sessions.php" class="section-link">View all sessions</a>
+                    </div>
+
+                    <?php if (empty($recentSessions)): ?>
+                        <div class="empty-state">
+                            <p>No sessions are assigned to you yet.</p>
+                            <p class="space-top-sm">
+                                <a href="schedule.php" class="btn"><i class="fas fa-calendar-plus"></i> Open Schedule</a>
+                            </p>
+                        </div>
+                    <?php else: ?>
+                        <div class="content-list">
+                            <?php foreach ($recentSessions as $session): ?>
+                                <?php $paymentLabel = ucfirst(str_replace('_', ' ', (string) ($session['payment_status'] ?? 'unpaid'))); ?>
+                                <div class="item-card">
+                                    <div class="item-head">
+                                        <div>
+                                            <h3 class="item-title"><?php echo htmlspecialchars($session['student_name'] ?: 'Student'); ?></h3>
+                                            <div class="item-meta">
+                                                Subject: <?php echo htmlspecialchars($session['subject']); ?><br>
+                                                Date: <?php echo date('M j, Y g:i A', strtotime($session['session_date'])); ?><br>
+                                                Payment: <?php echo htmlspecialchars($paymentLabel); ?>
+                                            </div>
+                                        </div>
+                                        <span class="status-pill <?php echo htmlspecialchars($session['status']); ?>"><?php echo htmlspecialchars($session['status']); ?></span>
+                                    </div>
+                                    <div class="item-actions">
+                                        <a href="schedule.php" class="btn"><i class="fas fa-calendar-days"></i> Open Schedule</a>
+                                        <a href="messages.php" class="btn secondary"><i class="fas fa-envelope"></i> Messages</a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </article>
+
+                <div class="stack">
+                    <article class="dashboard-card section-card">
+                        <div class="section-head">
+                            <div>
+                                <h2 class="section-title">Tutor Snapshot</h2>
+                            </div>
+                            <a href="profile.php" class="section-link">Edit profile</a>
+                        </div>
+
+                        <div class="mini-grid">
+                            <div class="mini-card">
+                                <div class="mini-label">Verification</div>
+                                <div class="mini-value"><?php echo htmlspecialchars($verificationStatus); ?></div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mini-label">Location</div>
+                                <div class="mini-value"><?php echo htmlspecialchars($locationSummary); ?></div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mini-label">Curriculum</div>
+                                <div class="mini-value"><?php echo htmlspecialchars($profile['curriculum_specialties_display'] ?? 'Not set'); ?></div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mini-label">Levels</div>
+                                <div class="mini-value"><?php echo htmlspecialchars($profile['study_levels_supported_display'] ?? 'Not set'); ?></div>
+                            </div>
+                        </div>
+
+                        <div class="item-tags space-top-md">
+                            <?php if (empty($subjects)): ?>
+                                <span class="tag"><i class="fas fa-circle-info"></i> Add subjects</span>
+                            <?php else: ?>
+                                <?php foreach (array_slice($subjects, 0, 5) as $subject): ?>
+                                    <span class="tag"><i class="fas fa-book-open"></i> <?php echo htmlspecialchars($subject); ?></span>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="mini-card space-top-md">
+                            <div class="mini-label">Availability</div>
+                            <div class="mini-value"><?php echo htmlspecialchars($availabilitySummary); ?></div>
+                        </div>
+                    </article>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 </body>
 </html>

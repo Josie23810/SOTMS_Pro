@@ -1,0 +1,13 @@
+=== Simple Database Debug ===
+Database connection: OK
+Study levels table exists: YES
+Study levels count: 27
+First 5 levels:
+- Grade 4 (primary)
+- Grade 5 (primary)
+- Grade 6 (primary)
+- Grade 7 (junior_secondary)
+- Grade 8 (junior_secondary)
+
+=== ProfileTaxonomyService Test ===
+Platform schema is not ready. Run run_phase1_migration.php, run_phase3_migration.php, and run_phase4_migration.php before using the application. Missing: column:sessions.preferred_time, column:sessions.created_at, column:sessions.updated_at, column:tutor_materials.subject, column:tutor_materials.curriculum, column:tutor_materials.study_level, column:payments.provider, column:payments.tracking_id, column:payments.pesapal_txn_id, column:payments.paypal_payment_id

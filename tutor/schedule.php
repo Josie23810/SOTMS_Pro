@@ -43,15 +43,20 @@ try {
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
         body { font-family: 'Poppins', sans-serif; background: linear-gradient(180deg, rgba(15,23,42,0.6), rgba(15,23,42,0.6)), url('../uploads/image003.jpg') center/cover no-repeat; margin:0; color:#1f2937; padding:20px; }
-        .container { max-width:1120px; margin:0 auto; background: rgba(255,255,255,0.96); border-radius:20px; overflow:hidden; box-shadow:0 24px 50px rgba(15,23,42,0.18);}
+        .container { max-width:1240px; margin:0 auto; background: rgba(255,255,255,0.96); border-radius:20px; overflow:hidden; box-shadow:0 24px 50px rgba(15,23,42,0.18);}
         .header { background: linear-gradient(135deg,#2563eb,#1d4ed8); color:white; padding:30px; }
         .header h1 { margin:0; font-size:2.4rem; }
         .nav { padding:20px; background:#f8fafc; border-bottom:1px solid #e5e7eb; }
         .nav a { color:#2563eb; margin-right:18px; text-decoration:none; font-weight:600; }
         .content { padding:30px; }
-        .session-card { background:white; border:1px solid #e5e7eb; border-radius:18px; padding:22px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:flex-start; gap:20px; box-shadow:0 10px 24px rgba(15,23,42,0.08); }
-        .session-card h3 { margin:0 0 8px; }
-        .session-meta { color:#6b7280; margin:8px 0 0; line-height:1.6; }
+        .summary-box { background:#eff6ff; border:1px solid #bfdbfe; border-radius:16px; padding:16px 18px; margin-bottom:24px; color:#334155; }
+        .table-wrap { overflow-x:auto; border:1px solid #e2e8f0; border-radius:18px; background:#fff; }
+        .schedule-table { width:100%; border-collapse:collapse; min-width:980px; }
+        .schedule-table th, .schedule-table td { padding:14px 16px; text-align:left; vertical-align:top; border-bottom:1px solid #e5e7eb; }
+        .schedule-table th { background:#eff6ff; color:#475569; font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+        .schedule-table tbody tr:last-child td { border-bottom:none; }
+        .cell-title { font-weight:700; color:#111827; margin-bottom:4px; }
+        .cell-subtext { color:#64748b; font-size:.86rem; line-height:1.45; }
         .status-pill { display:inline-flex; align-items:center; justify-content:center; padding:8px 14px; border-radius:999px; font-size:0.8rem; font-weight:700; text-transform:uppercase; }
         .pending{background:#fef3c7;color:#b45309;} .confirmed{background:#dbeafe;color:#1d4ed8;} .completed{background:#d1fae5;color:#065f46;} .cancelled{background:#fee2e2;color:#991b1b;}
         .btn { display:inline-flex; align-items:center; justify-content:center; background:#2563eb; color:white; padding:12px 20px; border:none; border-radius:12px; text-decoration:none; font-weight:700; cursor:pointer; }
@@ -60,16 +65,19 @@ try {
         .btn-success:hover { background:#059669; }
         .btn-danger { background:#ef4444; }
         .btn-danger:hover { background:#dc2626; }
-        .summary-box { background:#eff6ff; border:1px solid #bfdbfe; border-radius:16px; padding:18px; margin-bottom:24px; }
+        .pill { display:inline-flex; align-items:center; justify-content:center; padding:7px 11px; border-radius:999px; font-size:.8rem; font-weight:700; background:#eff6ff; color:#1d4ed8; white-space:nowrap; }
+        .actions-cell { min-width:240px; }
+        .actions-stack { display:flex; flex-wrap:wrap; gap:8px; }
+        .note-pill { display:inline-block; margin-top:6px; padding:6px 10px; border-radius:999px; background:#f8fafc; color:#475569; font-size:.8rem; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .empty-state { text-align:center; color:#475569; padding:50px 20px; }
-        @media(max-width:768px){ .session-card{flex-direction:column;} .nav a{display:block;margin-bottom:10px;} }
+        @media(max-width:768px){ .nav a{display:block;margin-bottom:10px;} }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>My Schedule</h1>
-            <p>Review requests, prevent collisions, and manage confirmed tutoring sessions.</p>
+            <p>Requests, sessions, and actions.</p>
         </div>
         <div class="nav">
             <a href="dashboard.php">Dashboard</a>
@@ -79,9 +87,9 @@ try {
         </div>
         <div class="content">
             <div class="summary-box">
-                <strong>Availability summary:</strong>
+                <strong>Availability:</strong>
                 <?php echo htmlspecialchars($profile['availability_summary'] ?? ($profile['availability_days'] ?? 'Not set')); ?>
-                | Max sessions per day: <?php echo htmlspecialchars((string) ($profile['max_sessions_per_day'] ?? 'Not set')); ?>
+                | Max/day: <?php echo htmlspecialchars((string) ($profile['max_sessions_per_day'] ?? 'Not set')); ?>
             </div>
 
             <?php if ($message): ?>
@@ -93,46 +101,74 @@ try {
             <?php if (empty($sessions)): ?>
                 <div class="empty-state">
                     <h3>No scheduled sessions yet.</h3>
-                    <p>Once students book sessions, they will appear here with their date, time, payment status, and curriculum details.</p>
                 </div>
             <?php else: ?>
-                <?php foreach ($sessions as $session): ?>
-                    <div class="session-card">
-                        <div>
-                            <h3><?php echo htmlspecialchars($session['student_name'] ?: 'Student'); ?></h3>
-                            <div class="session-meta"><strong>Subject:</strong> <?php echo htmlspecialchars($session['subject']); ?></div>
-                            <div class="session-meta"><strong>Date:</strong> <?php echo date('l, F j, Y \a\t g:i A', strtotime($session['session_date'])); ?></div>
-                            <div class="session-meta"><strong>Duration:</strong> <?php echo (int) $session['duration']; ?> minutes</div>
-                            <div class="session-meta"><strong>Curriculum:</strong> <?php echo htmlspecialchars($session['curriculum'] ?: 'Not provided'); ?></div>
-                            <div class="session-meta"><strong>Study Level:</strong> <?php echo htmlspecialchars($session['study_level'] ?: 'Not provided'); ?></div>
-                            <div class="session-meta"><strong>Payment:</strong> <?php echo htmlspecialchars(ucfirst($session['payment_status'] ?: 'unpaid')); ?></div>
-                            <?php if (!empty($session['notes'])): ?>
-                                <div class="session-meta"><strong>Notes:</strong> <?php echo htmlspecialchars($session['notes']); ?></div>
-                            <?php endif; ?>
-                            <?php if ($session['status'] === 'confirmed' && $session['meeting_link']): ?>
-                                <div class="session-meta"><strong>Meeting Link:</strong> <a href="<?php echo htmlspecialchars($session['meeting_link']); ?>" target="_blank" style="color:#10b981; font-weight:600;">Open</a></div>
-                            <?php endif; ?>
-                        </div>
-                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:10px;">
-                            <a href="edit_session.php?id=<?php echo (int) $session['id']; ?>" class="btn">Edit</a>
-                            <span class="status-pill <?php echo htmlspecialchars($session['status']); ?>"><?php echo htmlspecialchars($session['status']); ?></span>
-                            <?php if ($session['status'] === 'pending'): ?>
-                                <div style="display:flex; gap:10px;">
-                                    <form method="POST">
-                                        <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
-                                        <input type="hidden" name="action" value="accept">
-                                        <button type="submit" class="btn btn-success">Accept</button>
-                                    </form>
-                                    <form method="POST" onsubmit="return confirm('Decline this session request?');">
-                                        <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
-                                        <input type="hidden" name="action" value="decline">
-                                        <button type="submit" class="btn btn-danger">Decline</button>
-                                    </form>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
+                <div class="table-wrap">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Subject</th>
+                                <th>Date</th>
+                                <th>Level</th>
+                                <th>Status</th>
+                                <th>Payment</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($sessions as $session): ?>
+                                <?php $paymentLabel = ucfirst(str_replace('_', ' ', (string) ($session['payment_status'] ?: 'unpaid'))); ?>
+                                <tr>
+                                    <td>
+                                        <div class="cell-title"><?php echo htmlspecialchars($session['student_name'] ?: 'Student'); ?></div>
+                                        <div class="cell-subtext"><?php echo (int) $session['duration']; ?> min</div>
+                                        <?php if (!empty($session['notes'])): ?>
+                                            <span class="note-pill"><?php echo htmlspecialchars($session['notes']); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <div class="cell-title"><?php echo htmlspecialchars($session['subject']); ?></div>
+                                        <div class="cell-subtext"><?php echo htmlspecialchars($session['curriculum'] ?: 'Not set'); ?></div>
+                                    </td>
+                                    <td>
+                                        <div class="cell-subtext"><?php echo date('D, M j', strtotime($session['session_date'])); ?></div>
+                                        <div class="cell-subtext"><?php echo date('g:i A', strtotime($session['session_date'])); ?></div>
+                                    </td>
+                                    <td>
+                                        <div class="cell-subtext"><?php echo htmlspecialchars($session['study_level'] ?: 'Not set'); ?></div>
+                                    </td>
+                                    <td>
+                                        <span class="status-pill <?php echo htmlspecialchars($session['status']); ?>"><?php echo htmlspecialchars($session['status']); ?></span>
+                                    </td>
+                                    <td>
+                                        <span class="pill"><?php echo htmlspecialchars($paymentLabel); ?></span>
+                                        <?php if ($session['status'] === 'confirmed' && $session['meeting_link']): ?>
+                                            <div class="cell-subtext"><a href="<?php echo htmlspecialchars($session['meeting_link']); ?>" target="_blank" style="color:#10b981; font-weight:600;">Meeting link</a></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="actions-cell">
+                                        <div class="actions-stack">
+                                            <a href="edit_session.php?id=<?php echo (int) $session['id']; ?>" class="btn">Edit</a>
+                                            <?php if ($session['status'] === 'pending'): ?>
+                                                <form method="POST">
+                                                    <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
+                                                    <input type="hidden" name="action" value="accept">
+                                                    <button type="submit" class="btn btn-success">Accept</button>
+                                                </form>
+                                                <form method="POST" onsubmit="return confirm('Decline this session request?');">
+                                                    <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
+                                                    <input type="hidden" name="action" value="decline">
+                                                    <button type="submit" class="btn btn-danger">Decline</button>
+                                                </form>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             <?php endif; ?>
         </div>
     </div>

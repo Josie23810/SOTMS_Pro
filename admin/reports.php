@@ -73,6 +73,7 @@ $materialsCount = (int) ($pdo->query("SELECT COUNT(*) FROM tutor_materials")->fe
 
 $statusCounts = $pdo->query("SELECT status, COUNT(*) as count FROM sessions GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);
 $providerCounts = $pdo->query("SELECT provider, COUNT(*) as count FROM payments GROUP BY provider")->fetchAll(PDO::FETCH_KEY_PAIR);
+$legacyPaymentCount = max(0, (int) array_sum($providerCounts) - (int) ($providerCounts['pesapal'] ?? 0));
 $recentSessions = $pdo->query("
     SELECT s.subject, s.status, s.session_date, su.name AS student_name, tu.name AS tutor_name
     FROM sessions s
@@ -161,10 +162,8 @@ $recentSessions = $pdo->query("
                 <div class="report-card">
                     <h3>Payment Channels</h3>
                     <div class="summary-line">
-                        M-Pesa: <?php echo (int) ($providerCounts['mpesa'] ?? 0); ?><br>
-                        Pesapal: <?php echo (int) ($providerCounts['pesapal'] ?? 0); ?><br>
-                        PayPal: <?php echo (int) ($providerCounts['paypal'] ?? 0); ?><br>
-                        Other: <?php echo max(0, (int) array_sum($providerCounts) - (int) ($providerCounts['mpesa'] ?? 0) - (int) ($providerCounts['pesapal'] ?? 0) - (int) ($providerCounts['paypal'] ?? 0)); ?>
+                        PesaPal: <?php echo (int) ($providerCounts['pesapal'] ?? 0); ?><br>
+                        Legacy Records: <?php echo $legacyPaymentCount; ?>
                     </div>
                 </div>
             </div>

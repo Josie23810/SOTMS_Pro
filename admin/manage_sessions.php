@@ -49,41 +49,21 @@ $sessions = $stmt->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Sessions - Admin</title>
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/admin_portal.css">
     <link href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css" rel="stylesheet">
-    <style>
-        body { font-family: 'Poppins', sans-serif; background: linear-gradient(rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url('../uploads/image005.jpg') center/cover fixed; margin:0; padding:20px; }
-        .container { max-width:1440px; margin:0 auto; background:rgba(255,255,255,0.96); border-radius:20px; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.2); }
-        .header { background:linear-gradient(135deg, #8b5cf6, #7c3aed); color:white; padding:25px; text-align:center; }
-        .header h1 { margin:0; font-size:2.2rem; }
-        .nav-top { background:#f8fafc; padding:15px 25px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; }
-        .nav-top a { color:#2563eb; text-decoration:none; font-weight:600; padding:10px 20px; border-radius:8px; background:#dbeafe; }
-        .content { padding:30px; }
-        .message { padding:15px; border-radius:12px; margin-bottom:25px; font-weight:600; }
-        .success { background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; }
-        .error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
-        table { width:100%; border-collapse:collapse; margin-top:20px; background:white; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.1); }
-        th { background:linear-gradient(135deg, #8b5cf6, #7c3aed); color:white; padding:18px 15px; text-align:left; font-weight:600; }
-        td { padding:15px; border-bottom:1px solid #f1f5f9; }
-        .status-select { padding:5px 8px; border-radius:6px; border:1px solid #d1d5db; background:white; }
-        .action-btn { padding:8px 12px; border-radius:6px; font-size:0.85rem; font-weight:600; margin:0 3px; text-decoration:none; }
-        .btn-edit { background:#10b981; color:white; }
-        .btn-delete { background:#ef4444; color:white; border:none; cursor:pointer; }
-        @media (max-width:768px) { .nav-top { flex-direction:column; gap:15px; } }
-    </style>
 </head>
-<body>
+<body class="admin-portal">
     <div class="container">
         <div class="header">
             <h1>Manage Sessions</h1>
-            <p>Review bookings, payment status, and assignment details across the platform.</p>
+            <p>Review bookings, payment state, and schedule details.</p>
         </div>
 
         <div class="nav-top">
             <h3>Total Sessions: <?php echo count($sessions); ?></h3>
-            <div>
-                <a href="dashboard.php">Dashboard</a>
-                <a href="reports.php?export=sessions">Export</a>
-            </div>
+            <a href="dashboard.php">Dashboard</a>
+            <a href="payments_review.php">Payments Review</a>
+            <a href="reports.php?export=sessions">Export CSV</a>
         </div>
 
         <div class="content">
@@ -123,7 +103,7 @@ $sessions = $stmt->fetchAll();
                                 <form method="POST" style="display:inline;">
                                     <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
                                     <input type="hidden" name="update_status" value="1">
-                                    <select name="status" class="status-select" onchange="this.form.submit()">
+                                    <select name="status" onchange="this.form.submit()">
                                         <?php foreach (['pending', 'confirmed', 'completed', 'cancelled'] as $status): ?>
                                             <option value="<?php echo $status; ?>" <?php echo $session['status'] === $status ? 'selected' : ''; ?>><?php echo ucfirst($status); ?></option>
                                         <?php endforeach; ?>
@@ -131,12 +111,14 @@ $sessions = $stmt->fetchAll();
                                 </form>
                             </td>
                             <td>
-                                <a href="edit_session.php?id=<?php echo (int) $session['id']; ?>" class="action-btn btn-edit">Edit</a>
-                                <form method="POST" style="display:inline;" onsubmit="return confirm('Delete session?');">
-                                    <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
-                                    <input type="hidden" name="delete_session" value="1">
-                                    <button type="submit" class="action-btn btn-delete">Delete</button>
-                                </form>
+                                <div class="stack-actions">
+                                    <a href="edit_session.php?id=<?php echo (int) $session['id']; ?>" class="action-btn btn-edit">Edit</a>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Delete session?');">
+                                        <input type="hidden" name="session_id" value="<?php echo (int) $session['id']; ?>">
+                                        <input type="hidden" name="delete_session" value="1">
+                                        <button type="submit" class="action-btn btn-delete">Delete</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>

@@ -192,6 +192,7 @@ body.admin-portal .form-card {
 }
 
 body.admin-portal .stats-grid,
+body.admin-portal .kpi-grid,
 body.admin-portal .report-grid,
 body.admin-portal .grid,
 body.admin-portal .info-grid {
@@ -201,6 +202,18 @@ body.admin-portal .info-grid {
 
 body.admin-portal .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-bottom: 26px;
+}
+
+body.admin-portal .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin-bottom: 26px;
+}
+
+body.admin-portal .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
     margin-bottom: 26px;
 }
 
@@ -218,6 +231,211 @@ body.admin-portal .stat-card {
     padding: 22px 18px;
     text-align: left;
     border-top: 4px solid #2563eb;
+}
+
+body.admin-portal .kpi-card {
+    padding: 22px 20px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 20px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
+
+body.admin-portal .chart-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 20px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+    padding: 22px 20px;
+}
+
+body.admin-portal .chart-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+body.admin-portal .chart-total {
+    margin: 6px 0 0;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+body.admin-portal .chart-filter {
+    min-width: 168px;
+}
+
+body.admin-portal .chart-filter select {
+    background: #eef4ff;
+    border-color: #dbeafe;
+    font-weight: 700;
+    color: #1e3a8a;
+}
+
+body.admin-portal .bar-chart {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+    gap: 12px;
+    align-items: end;
+    min-height: 250px;
+}
+
+body.admin-portal .bar-item {
+    display: grid;
+    gap: 8px;
+    align-items: end;
+}
+
+body.admin-portal .bar-track {
+    height: 160px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+    border: 1px solid #e5edf8;
+    border-radius: 16px;
+    padding: 10px;
+}
+
+body.admin-portal .bar-fill {
+    width: 100%;
+    border-radius: 12px;
+    min-height: 8px;
+    display: block;
+}
+
+body.admin-portal .revenue-fill {
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+body.admin-portal .session-fill {
+    background: linear-gradient(180deg, #0f766e 0%, #0ea5a4 100%);
+}
+
+body.admin-portal .bar-label {
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.25;
+}
+
+body.admin-portal .bar-value {
+    color: #0f172a;
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+body.admin-portal .status-chart {
+    display: grid;
+    gap: 14px;
+}
+
+body.admin-portal .status-row {
+    display: grid;
+    gap: 8px;
+}
+
+body.admin-portal .status-row-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 700;
+    color: #334155;
+}
+
+body.admin-portal .status-bar-track {
+    height: 12px;
+    background: #e8eef9;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+body.admin-portal .status-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+}
+
+body.admin-portal .status-pending {
+    background: linear-gradient(135deg, #2563eb, #60a5fa);
+}
+
+body.admin-portal .status-gateway_submitted {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+body.admin-portal .status-paid {
+    background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
+
+body.admin-portal .status-failed {
+    background: linear-gradient(135deg, #dc2626, #f87171);
+}
+
+body.admin-portal .status-refunded {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+}
+
+body.admin-portal .kpi-eyebrow {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+}
+
+body.admin-portal .kpi-value {
+    margin: 0 0 6px;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.05;
+}
+
+body.admin-portal .kpi-note {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.92rem;
+}
+
+body.admin-portal .split-panels {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 18px;
+    margin-bottom: 26px;
+}
+
+body.admin-portal .metric-list {
+    display: grid;
+    gap: 14px;
+}
+
+body.admin-portal .metric-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e5edf8;
+}
+
+body.admin-portal .metric-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+body.admin-portal .metric-name {
+    color: #475569;
+    font-weight: 600;
+}
+
+body.admin-portal .metric-strong {
+    color: #0f172a;
+    font-weight: 800;
 }
 
 body.admin-portal .stat-number {
@@ -248,9 +466,80 @@ body.admin-portal .quick-actions {
     gap: 14px;
 }
 
+body.admin-portal .filter-panel {
+    margin-bottom: 26px;
+}
+
+body.admin-portal .reports-filter-form {
+    display: grid;
+    gap: 12px;
+}
+
+body.admin-portal .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 16px;
+}
+
+body.admin-portal .filter-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+body.admin-portal .filter-note {
+    margin: 6px 0 0;
+    color: #64748b;
+}
+
+body.admin-portal .filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+body.admin-portal .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #e9f1ff;
+    border: 1px solid #dbeafe;
+}
+
+body.admin-portal .filter-pill.active {
+    color: #fff;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border-color: transparent;
+}
+
 body.admin-portal .activity-item {
     padding: 14px 0;
     border-bottom: 1px solid #e5edf8;
+}
+
+body.admin-portal .metric {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid #e5edf8;
+    color: #475569;
+}
+
+body.admin-portal .metric:last-of-type {
+    border-bottom: none;
+}
+
+body.admin-portal .metric-value {
+    color: #0f172a;
+    font-weight: 800;
 }
 
 body.admin-portal .activity-item:last-child {
@@ -273,6 +562,35 @@ body.admin-portal .status-chip {
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.04em;
+}
+
+body.admin-portal .table-shell {
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid #e5edf8;
+    border-radius: 20px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
+
+body.admin-portal .admin-table {
+    min-width: 980px;
+}
+
+body.admin-portal .table-subtle {
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+body.admin-portal .table-form {
+    display: grid;
+    gap: 10px;
+    min-width: 220px;
+}
+
+body.admin-portal .table-form textarea {
+    min-height: 72px;
 }
 
 body.admin-portal .role-student {
@@ -433,7 +751,8 @@ body.admin-portal .stack-actions {
 
 @media (max-width: 900px) {
     body.admin-portal .grid,
-    body.admin-portal .info-grid {
+    body.admin-portal .info-grid,
+    body.admin-portal .split-panels {
         grid-template-columns: 1fr;
     }
 }
@@ -478,5 +797,14 @@ body.admin-portal .stack-actions {
     body.admin-portal .quick-actions,
     body.admin-portal .stack-actions {
         flex-direction: column;
+    }
+
+    body.admin-portal .chart-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    body.admin-portal .chart-filter {
+        min-width: 100%;
     }
 }
